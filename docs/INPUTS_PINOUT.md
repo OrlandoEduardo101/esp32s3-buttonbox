@@ -1,11 +1,16 @@
 # INPUTS_PINOUT.md — Arquitetura de entradas do hardware final
 
-> Documento de definição de pinout, **sem nenhum código implementado**. Serve
-> de referência definitiva para montagem física e para o próximo passo
-> (portar o firmware de entradas). Baseado nas restrições reais do chip
-> ESP32-S3 (verificadas em `variants/esp32s3/pins_arduino.h` do core
-> Arduino-ESP32 instalado) e nas capacidades de datasheet do MCP23017 e do
-> 74HC4067.
+> Documento de definição de pinout — o **raciocínio** por trás de cada
+> escolha de pino/canal. Baseado nas restrições reais do chip ESP32-S3
+> (verificadas em `variants/esp32s3/pins_arduino.h` do core Arduino-ESP32
+> instalado) e nas capacidades de datasheet do MCP23017 e do 74HC4067.
+>
+> **Os números que valem de verdade estão em `include/board_config.h`.**
+> Trocou de placa ou quer outro pinout? Edite só aquele arquivo — nenhum
+> outro `.cpp`/`.h` do projeto tem pino/canal/endereço fixo. Este documento
+> continua valendo como explicação de *por que* cada escolha foi feita
+> (restrições elétricas, folga de expansão etc.), não como fonte dos
+> valores atuais.
 
 ## Por que esta distribuição
 

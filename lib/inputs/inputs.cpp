@@ -3,14 +3,9 @@
 #include "input_expander.h" // MCP23017 (lib/input_expander) — nao alterado
 #include "mux4067.h"         // 74HC4067 (lib/mux4067) — nao alterado
 #include "encoders.h"        // KY-040 (lib/encoders) — nao alterado
+#include "board_config.h"    // mapa unico de pinos/canais deste projeto (include/)
 
 namespace {
-
-// Quantos canais do 74HC4067 esta camada usa: C0-C8 do mapa aprovado
-// (docs/INPUTS_PINOUT.md secao 3). Detalhe que só existe aqui dentro —
-// ninguém fora deste arquivo precisa saber que o mux existe, quanto menos
-// quantos canais ele varre.
-constexpr uint8_t INPUTS_MUX_CHANNEL_COUNT = 9;
 
 // --- Mapeamento fisico -----------------------------------------------
 // Este é o ÚNICO lugar do firmware que sabe de onde cada InputId vem de
@@ -120,11 +115,12 @@ bool readLevel(const InputBinding &b) {
 } // namespace
 
 void inputs_init() {
-  input_expander_init();
-  mux4067_init(MUX4067_DEFAULT_S0_PIN, MUX4067_DEFAULT_S1_PIN,
-               MUX4067_DEFAULT_S2_PIN, MUX4067_DEFAULT_S3_PIN,
-               MUX4067_DEFAULT_SIG_PIN, INPUTS_MUX_CHANNEL_COUNT);
-  encoder_init();
+  // Todo pino/canal/endereço vem de include/board_config.h — é o único
+  // lugar que muda se a placa ou o pinout mudar.
+  input_expander_init(BOARD_MCP23017_ADDR, BOARD_I2C_SDA_PIN, BOARD_I2C_SCL_PIN);
+  mux4067_init(BOARD_MUX_S0_PIN, BOARD_MUX_S1_PIN, BOARD_MUX_S2_PIN,
+               BOARD_MUX_S3_PIN, BOARD_MUX_SIG_PIN, BOARD_MUX_CHANNEL_COUNT);
+  encoder_init(BOARD_ENCODER_CLK_PIN, BOARD_ENCODER_DT_PIN);
 
   for (uint8_t id = 0; id < INPUT_ID_COUNT; id++) {
     InputRuntime &rt = g_runtime[id];

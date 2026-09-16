@@ -63,6 +63,39 @@ anteriores e não foi reescrito, só verificado.
   fixas (vermelho/verde/azul/branco/apagado) pra validar o canal RMT sem
   depender do SimHub.
 
+## Pinout centralizado — `include/board_config.h`
+
+Adicionado em 2026-09-16, a pedido explícito: o usuário escolheu uma
+ESP32-S3 bem pequena por ter os expansores disponíveis, mas quer poder
+trocar de placa (uma maior, ou outra variante) no futuro, e também deixar
+o projeto reaproveitável por outras pessoas com pinout diferente.
+
+**Antes**: cada driver (`lib/mcp23017`, `lib/mux4067`, `lib/encoders`,
+`lib/ws2812`) tinha seus próprios pinos default, e `lib/inputs`/`main.cpp`
+simplesmente usavam esses defaults sem passar nada explícito — pra mudar
+um pino era preciso editar o `.h` de dentro da lib.
+
+**Depois**: `include/board_config.h` é o único arquivo com pino/canal/
+endereço deste projeto. `lib/inputs/inputs.cpp` e `src/main.cpp` leem os
+valores de lá e passam explicitamente pra cada `_init()`. Os drivers de
+baixo nível continuam com seus próprios defaults (agora só usados se
+alguém pegar uma lib sozinha, fora deste projeto, sem `board_config.h`) —
+mantendo cada driver genérico e reutilizável independentemente.
+
+Mudança puramente estrutural, sem efeito em runtime: RAM/Flash do
+`esp32s3-supermini` idênticos antes/depois (89624 B / 911849 B).
+
+Detalhe de build necessário: o diretório `include/` do PlatformIO não é
+visível por padrão para bibliotecas privadas em `lib/` (só para `src/`) —
+foi preciso adicionar `-I include` ao `build_flags` dos envs que
+`#include board_config.h` transitivamente (`esp32s3-supermini`, que o
+`ota` herda via `extends`, e `inputs-test`).
+
+Pra trocar de placa/pinout: edite só `include/board_config.h`. Nenhum
+outro arquivo precisa mudar (a menos que a própria placa exija uma
+`board.json` diferente — ver `boards/esp32-s3-fh4r2.json`, que é sobre o
+chip/flash/PSRAM, não sobre os pinos de entrada/saída).
+
 ## Auditoria das 12 regras (verificada por grep/leitura, não por memória)
 
 | # | Regra | Verificação | Resultado |

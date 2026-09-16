@@ -46,16 +46,19 @@ enum EncoderEvent : uint8_t {
 
 static const uint8_t ENCODER_COUNT = 4;
 
-// Pinos default (docs/INPUTS_PINOUT.md secao 4) — todos em GPIO0-21,
-// universal em qualquer variante de ESP32-S3.
+// Pinos default — usados só se este driver for usado isolado, fora deste
+// projeto (sem passar clkPins/dtPins explícitos). Dentro deste projeto,
+// quem chama sempre passa os valores de include/board_config.h — ver
+// lib/inputs/inputs.cpp.
 static const uint8_t ENCODER_DEFAULT_CLK_PIN[ENCODER_COUNT] = {4, 6, 10, 12};
 static const uint8_t ENCODER_DEFAULT_DT_PIN[ENCODER_COUNT]  = {5, 7, 11, 13};
 
 // Configura os 8 pinos (4 x CLK/DT) como entrada (com pull-up interno da
 // ESP32 como rede de segurança — os módulos KY-040 já trazem pull-up
 // próprio, mas isso evita leitura flutuante se algum não tiver) e liga as
-// interrupções CHANGE. Usa os pinos default de docs/INPUTS_PINOUT.md.
-void encoder_init();
+// interrupções CHANGE. clkPins[i]/dtPins[i] = pinos do encoder i (0-3).
+void encoder_init(const uint8_t clkPins[ENCODER_COUNT] = ENCODER_DEFAULT_CLK_PIN,
+                   const uint8_t dtPins[ENCODER_COUNT]  = ENCODER_DEFAULT_DT_PIN);
 
 // Esvazia o ring buffer de amostras cruas de cada um dos 4 encoders e
 // avança a máquina de estados de quadratura sobre elas, em ordem. Não usa

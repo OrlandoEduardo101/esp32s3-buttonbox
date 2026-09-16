@@ -36,6 +36,7 @@
 #include "inputs.h" // camada unificada de entradas (MCP23017+74HC4067+encoders)
 #include "simhub.h" // protocolo Standard Serial do SimHub, sobre o mesmo CDC
 #include "ws2812.h" // driver da fita/matriz WS2812 (RMT) — so desenha, nao conhece SimHub
+#include "board_config.h" // mapa unico de pinos deste projeto — mude so aqui pra outra placa
 
 USBHIDGamepad Gamepad;
 
@@ -140,7 +141,7 @@ static void updateEncoderPulses(uint32_t &buttons, uint32_t now) {
   }
 }
 
-static const uint8_t PIN_BOOT  = 0;
+static const uint8_t PIN_BOOT  = BOARD_BOOT_PIN;
 static const char   *AP_NAME   = "ButtonBox-Setup";
 
 static WiFiManager wm;
@@ -331,7 +332,7 @@ void setup() {
 
   // Driver da fita/matriz WS2812 — so desenha o que o framebuffer do
   // SimHub tiver; nao sabe (nem precisa saber) o que cada pixel significa.
-  if (!ws2812_init()) {
+  if (!ws2812_init(BOARD_WS2812_PIN)) {
     Serial.println("[ws2812] AVISO: falha ao inicializar canal RMT");
   }
 

@@ -28,6 +28,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "mcp23017.h" // MCP23017_DEFAULT_* — usados só se init() for chamado sem argumentos
 
 // Tempo mínimo (ms) que uma transição precisa se manter estável antes de
 // ser aceita como novo estado. 15 ms cobre bounce típico de botão/switch
@@ -35,8 +36,13 @@
 static const uint32_t INPUT_EXPANDER_DEBOUNCE_MS = 15;
 
 // Inicializa o MCP23017 (I2C + direção + pull-up, ver mcp23017_init()).
-// Retorna false se o chip não responder no barramento.
-bool input_expander_init();
+// Os 3 parâmetros default são os do MCP23017 isolado (para uso fora deste
+// projeto); dentro deste projeto, lib/inputs sempre passa os valores de
+// include/board_config.h. Retorna false se o chip não responder no
+// barramento.
+bool input_expander_init(uint8_t i2c_addr = MCP23017_DEFAULT_I2C_ADDR,
+                          uint8_t sda_pin  = MCP23017_DEFAULT_SDA_PIN,
+                          uint8_t scl_pin  = MCP23017_DEFAULT_SCL_PIN);
 
 // Faz uma leitura do MCP23017 e avança a máquina de debounce. Não bloqueia
 // (não usa delay(); uma leitura I2C tem latência da ordem de dezenas de

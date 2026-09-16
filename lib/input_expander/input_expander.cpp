@@ -22,8 +22,8 @@ uint16_t g_stableRaw = 0xFFFF;
 uint32_t g_lastChangeMs[16] = {0};
 } // namespace
 
-bool input_expander_init() {
-  g_connected = mcp23017_init();
+bool input_expander_init(uint8_t i2c_addr, uint8_t sda_pin, uint8_t scl_pin) {
+  g_connected = mcp23017_init(i2c_addr, sda_pin, scl_pin);
 
   // Primeira leitura define o estado inicial sem esperar debounce — evita
   // reportar "tudo pressionado" ou instável nos primeiros ciclos após o

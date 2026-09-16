@@ -110,11 +110,11 @@ QuadState stepQuadrature(QuadState state, uint8_t pins, EncoderEvent *event) {
 
 } // namespace
 
-void encoder_init() {
+void encoder_init(const uint8_t clkPins[ENCODER_COUNT], const uint8_t dtPins[ENCODER_COUNT]) {
   for (uint8_t i = 0; i < ENCODER_COUNT; i++) {
     EncoderRuntime &enc = g_enc[i];
-    enc.clkPin = ENCODER_DEFAULT_CLK_PIN[i];
-    enc.dtPin  = ENCODER_DEFAULT_DT_PIN[i];
+    enc.clkPin = clkPins[i];
+    enc.dtPin  = dtPins[i];
     enc.head = 0;
     enc.tail = 0;
     enc.state = QuadState::Rest;
