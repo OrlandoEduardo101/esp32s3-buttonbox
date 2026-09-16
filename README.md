@@ -1,12 +1,52 @@
+🇧🇷 Português | [🇺🇸 English](README.en.md)
+
 # ESP32-S3 SimHub Button Box
 
-Button box USB para sim racing: HID gamepad nativo (32 botões), WiFi + OTA,
-e integração com o SimHub (aba "Arduino") pra controlar uma matriz 8x8 de
-LEDs endereçáveis (iFlag) e uma fita de LEDs (RPM), com todos os efeitos
-configurados dentro do próprio SimHub — nenhum comportamento de jogo é
-escrito neste firmware.
+![Render do button box](assets/buttonbox-render.png)
 
-## Hardware
+Button box open source (firmware + case impresso em 3D) pra sim racing:
+USB HID gamepad nativo, WiFi + OTA, e integração real com o SimHub — a
+placa aparece pro SimHub como um "Arduino" padrão, e **todos os efeitos de
+luz são configurados dentro do próprio SimHub**, sem precisar escrever
+nenhum comportamento de jogo no firmware.
+
+## O que é este projeto
+
+Um button box completo, do hardware ao firmware, com duas partes:
+
+1. **Eletrônica + firmware** (este repositório): uma ESP32-S3 lê até 31
+   controles físicos (botões, encoders, ignição, chaves, freio de
+   estacionamento) e os expõe como um gamepad USB padrão, ao mesmo tempo
+   em que fala o protocolo real do SimHub pela mesma porta serial pra
+   controlar uma matriz de LEDs 8x8 (ex.: bandeiras/iFlag) e uma fita de
+   LEDs (ex.: RPM).
+2. **Case impresso em 3D** (pasta [`assets/`](assets)): o invólucro físico
+   completo, mais pontos de fixação pra encaixar acessórios impressos por
+   terceiros (freio de estacionamento, botão de rádio PTT) — ver seção
+   abaixo.
+
+## Recursos principais
+
+- **HID nativo** (USB-OTG/TinyUSB) — aparece como gamepad no Windows sem
+  driver nenhum, 32 botões.
+- **WiFi + OTA** — depois da primeira gravação por cabo, todo o resto é
+  sem fio.
+- **Protocolo Arduino real do SimHub** — incluindo a camada de transporte
+  ARQ (checksum + confirmação por pacote) que o scanner da aba "Arduino"
+  do SimHub realmente usa, não um sketch de LED simplificado.
+- **RGB Matrix (8x8) + RGB Leds (fita)** — dois dispositivos lógicos
+  separados pro SimHub, numa única cadeia física de LEDs endereçáveis.
+  Nenhuma lógica de jogo no firmware: o SimHub decide as cores, o
+  firmware só recebe e acende.
+- **Pinout 100% centralizado e configurável** — trocar de placa ESP32 ou
+  reaproveitar este projeto com outro pinout é editar um arquivo só (ver
+  abaixo).
+- **Sem matriz de botões** — cada entrada tem canal/pino próprio,
+  priorizando confiabilidade e simplicidade de fiação.
+- **Case open source** — impresso em 3D, com pontos pra parafusar
+  acessórios de terceiros.
+
+## Hardware eletrônico
 
 | Componente | Função |
 |---|---|
@@ -17,9 +57,40 @@ escrito neste firmware.
 | Matriz WS2812 8x8 (64 LEDs) | RGB Matrix do SimHub — ex.: iFlag |
 | Fita WS2812 (~10 LEDs, configurável) | RGB Leds do SimHub — ex.: RPM |
 
-**Não usa matriz de botões** (nem física nem de varredura) — cada entrada
-tem seu próprio canal/pino, priorizando simplicidade de fiação e
-confiabilidade sobre economia extrema de GPIO.
+## Case impresso em 3D
+
+Tudo em [`assets/`](assets):
+
+| Arquivo | Conteúdo |
+|---|---|
+| `assets/STL/front.stl` | Painel frontal |
+| `assets/STL/rear.stl` | Painel traseiro |
+| `assets/STL/stand.stl` | Base/suporte |
+| `assets/STL/LED holder.stl` | Suporte da matriz/fita de LED |
+| `assets/buttonbox.f3z` | Projeto Fusion 360 completo, editável (arquivo grande — ver nota abaixo) |
+
+> **Nota sobre o `buttonbox.f3z`**: esse arquivo tem ~124 MB, acima do
+> limite de 100 MB que o GitHub aceita sem Git LFS configurado no
+> repositório. Ele ainda não está versionado aqui — se você precisar do
+> projeto Fusion 360 editável, pergunte ou acompanhe o repositório pra
+> essa parte ser resolvida (Git LFS, ou hospedagem externa).
+
+### Acessórios de terceiros compatíveis
+
+Estes não são meus — são projetos separados de outros criadores, feitos
+pra combinar com este button box. Baixe, imprima e parafuse direto no
+case:
+
+- **[Freio de estacionamento DIY para truck simulators](https://www.printables.com/model/995554-diy-parking-brake-for-truck-simulators/files)**
+  (Printables) — a alavanca física que aciona o `INPUT_HANDBRAKE`
+  (ver [`docs/INPUTS_PINOUT.md`](docs/INPUTS_PINOUT.md) seção 7 pra como o
+  firmware trata esse sinal).
+- **Botão de rádio (PTT)** — duas opções no Thingiverse:
+  [thing:4740146](https://www.thingiverse.com/thing:4740146) e
+  [thing:2928122](https://www.thingiverse.com/thing:2928122).
+
+Confira a licença e os créditos de cada modelo na própria página do
+autor antes de usar/redistribuir.
 
 ## Por que dá pra reaproveitar isso pra outra placa/pinout
 
