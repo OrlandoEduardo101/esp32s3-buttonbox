@@ -28,20 +28,58 @@ usuário e ambas aceitas pelo SimHub dele:
 - `~/Projects/arduino/ESP-SimHub-ESP32S3-SCREEN` (fork em uso) — mesmos
   arquivos, versão enxuta
 
-## Framing
+## Framing — são DUAS camadas
+
+### 1) Transporte ARQ
+
+O SimHub não manda comandos crus na serial. Tudo vai dentro de um pacote
+com id e CRC8, e o dispositivo precisa confirmar cada pacote:
+
+```
+Host  -> device:  0x01 0x01 <packetId> <len(1..32)> <dados...> <crc8>
+Device -> host:   ACK  = 0x03 <packetId>
+                  NACK = 0x04 <últimoPacoteVálido> <motivo>
+```
+
+O CRC8 é table-driven (tabela de 256 bytes copiada da referência) e cobre
+`packetId`, `len` e os bytes de dados. O pacote é aceito se o `packetId`
+for o próximo da sequência ou `255` (broadcast).
+
+Exemplo real, do próprio código de referência — o Hello:
+
+```
+01 01 FF 03 03 31 10 6A
+│  │  │  │  └──────┴── dados: 0x03 (header) '1' (hello) 0x10 (trailer)
+│  │  │  └── len = 3
+│  │  └── packetId = 255 (broadcast)
+│  └── header (repetido)
+└── header
+                                              crc8 = 0x6A
+```
+
+### 2) Comandos (dentro dos dados do ARQ)
 
 ```
 0x03 (MESSAGE_HEADER)  +  1 char de comando  +  payload específico
 ```
 
-Sem checksum, sem terminador global: cada comando define seu próprio
-payload e sua própria resposta.
+### Respostas do dispositivo (enquadradas, fora do ARQ)
+
+```
+byte     -> 0x08 <byte>
+string   -> 0x06 <len> <bytes> 0x20
+string+\n -> 0x06 <len+1> <bytes> '\n' 0x20
+```
+
+Um payload maior que 32 bytes (os 192 da matriz, por exemplo) chega
+dividido em vários pacotes ARQ — o parser puxa os pacotes seguintes
+conforme o comando precisa de mais bytes.
 
 ### Comandos implementados
 
 | Cmd | Nome | Payload recebido | Resposta |
 |---|---|---|---|
-| `'1'` | Hello | 1 byte (trailer, descartado) | char de versão `'j'` |
+| `'1'` | Hello | 1 byte (trailer, descartado) | `0x08 'j'` |
 | `'0'` | Features | — | `"NIXR\n"` |
 | `'4'` | RGB LED count | — | 1 byte = LEDs da **fita** |
 | `'6'` | RGB LED data | stream RGB | `0x15` (ACK) |
@@ -137,3 +175,23 @@ Lição: a documentação pública descrevia um protocolo real, mas não *o*
 protocolo do recurso que o usuário queria usar. A verificação que faltou
 foi testar contra o consumidor real (o próprio SimHub) em vez de só contra
 um script que falava o protocolo que eu mesmo tinha implementado.
+
+### Segunda correção: faltava a camada ARQ
+
+A versão seguinte já usava os comandos certos (`0x03` + char), mas ainda
+falhava — porque eu tratava o `0x03` como se viesse cru na serial. O que
+revelou o erro foi o stack trace no log do SimHub:
+`ArqSerialLib.ArqSerial.Open()`. O SimHub encapsula tudo na camada ARQ
+descrita acima, e espera ACK por pacote. Sem isso, o dispositivo nunca
+respondia nada que o SimHub reconhecesse.
+
+### Terceira peça: o gate de DTR
+
+Independente do protocolo, havia um segundo problema real: o
+`USBCDC::write()` do core Arduino-ESP32 **descarta silenciosamente** toda
+escrita quando `tud_cdc_n_connected()` é falso — e isso depende do host
+assertar **DTR**. O SimHub abre a porta sem assertar DTR (assertar reseta
+placas Arduino de verdade). Por isso as respostas são escritas direto via
+`tud_cdc_n_write()`, que não passa por esse gate. O console de texto
+(`PING`/`SETLEDS`/`DUMPLEDS`) continua no `Serial` normal, onde terminais
+sempre assertam DTR.

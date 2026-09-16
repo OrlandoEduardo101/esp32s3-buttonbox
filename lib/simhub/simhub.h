@@ -14,8 +14,17 @@
 //   ~/Projects/arduino/ESP-SimHub            (upstream, src/SHCommands.h)
 //   ~/Projects/arduino/ESP-SimHub-ESP32S3-SCREEN  (fork em uso pelo usuário)
 //
-// Framing:
-//   0x03 (MESSAGE_HEADER) + 1 char de comando + payload específico
+// Framing (DUAS camadas):
+//   1) transporte ARQ:  0x01 0x01 <packetId> <len> <dados...> <crc8>
+//      device responde  ACK  = 0x03 <packetId>
+//                       NACK = 0x04 <ultimoValido> <motivo>
+//   2) dentro dos dados: 0x03 (MESSAGE_HEADER) + 1 char de comando + payload
+//
+//   Exemplo real de Hello: 01 01 FF 03 03 31 10 6A
+//
+//   Respostas do device sao enquadradas (fora do ARQ):
+//     byte   -> 0x08 <byte>
+//     string -> 0x06 <len> <bytes> 0x20
 //
 // Comandos implementados aqui:
 //   '1' Hello        -> lê 1 byte (trailer), responde o char de versão ('j')
@@ -64,10 +73,11 @@ static const char SIMHUB_VERSION_CHAR = 'j';
 // usuário ("ESP-SimHubDisplay", "ESP-ButtonBox-WHEEL").
 static const char *const SIMHUB_DEVICE_NAME = "ESP32S3-ButtonBox";
 
-// Orçamento de tempo TOTAL para consumir um comando inteiro depois do
-// header. Cobre fragmentação do USB CDC sem travar o loop principal se o
+// Orçamento de tempo TOTAL para consumir um comando inteiro (inclusive os
+// pacotes ARQ adicionais que um payload grande exige, como os 192 bytes da
+// matriz). Cobre fragmentação do USB CDC sem travar o loop principal se o
 // SimHub parar de mandar bytes no meio.
-static const uint32_t SIMHUB_FRAME_TIMEOUT_MS = 150;
+static const uint32_t SIMHUB_FRAME_TIMEOUT_MS = 300;
 
 // Sem atividade serial por este tempo -> considera o SimHub desconectado e
 // apaga os dois framebuffers (mesmo comportamento do Command_Shutdown das
@@ -76,8 +86,8 @@ static const uint32_t SIMHUB_CONNECTION_TIMEOUT_MS = 5000;
 
 void simhub_init();
 
-// true se o byte é o header de um comando SimHub (0x03). Quem lê a serial
-// chama isto antes de tratar o byte como texto do console.
+// true se o byte é o início de um pacote ARQ do SimHub (0x01). Quem lê a
+// serial chama isto antes de tratar o byte como texto do console.
 bool simhub_is_header_byte(uint8_t b);
 
 // Consome e processa UM comando completo (char de comando + payload),
