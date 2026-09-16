@@ -22,8 +22,26 @@
 #include <Arduino.h>
 #include "simhub.h"
 
-static void handleSetledsLine(char *line) {
+static void printDumpleds() {
+  const uint16_t n = simhub_get_led_count();
+  const uint16_t toShow = (n < 8) ? n : 8;
+  Serial.printf("[dumpleds] conectado=%s total=%u ",
+                simhub_is_connected() ? "sim" : "nao", (unsigned)n);
+  for (uint16_t i = 0; i < toShow; i++) {
+    const SimhubColor c = simhub_get_led(i);
+    Serial.printf("LED%u=(%3u,%3u,%3u) ", i, c.r, c.g, c.b);
+  }
+  if (n > toShow) Serial.printf("... (+%u LEDs)", (unsigned)(n - toShow));
+  Serial.println();
+}
+
+static void handleTextLine(char *line) {
   for (char *p = line; *p; p++) *p = (char)toupper((int)*p);
+
+  if (strcmp(line, "DUMPLEDS") == 0) {
+    printDumpleds();
+    return;
+  }
   if (strncmp(line, "SETLEDS ", 8) != 0) return;
 
   const int n = atoi(line + 8);
@@ -63,7 +81,7 @@ void loop() {
     if (c == '\r') continue;
     if (c == '\n') {
       line[len] = '\0';
-      handleSetledsLine(line);
+      handleTextLine(line);
       len = 0;
       continue;
     }

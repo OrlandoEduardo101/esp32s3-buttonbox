@@ -10,16 +10,16 @@
 # (usa o Python do PlatformIO, que ja tem pyserial; ou "pip install
 # pyserial" num Python qualquer)
 #
-# IMPORTANTE: LED_COUNT abaixo tem que bater com a contagem configurada na
-# placa (comando serial "SETLEDS <n>", persistido em NVS — ver
-# docs/SIMHUB_PROTOCOL.md). Rode "SETLEDS 74" uma vez (ou o valor que for)
-# antes de usar este script, ou ajuste LED_COUNT pra bater com o que já
-# está gravado.
+# A contagem de LEDs é descoberta em runtime via "ledsc" (não fica mais
+# fixa no script) — reflete o que estiver gravado em NVS na placa,
+# ajustável a qualquer momento com o comando serial "SETLEDS <n>" (ver
+# docs/SIMHUB_PROTOCOL.md). Não precisa mais manter esse número
+# sincronizado à mão entre o script e o firmware.
+import re
 import sys
 import time
 import serial
 
-LED_COUNT = 74  # matriz 8x8 (64) + fita ~10 LEDs — precisa bater com o SETLEDS já gravado na placa
 HEADER = bytes([0xFF] * 6)
 TERMINATOR = bytes([0xFF, 0xFE, 0xFD])
 
@@ -51,8 +51,10 @@ def main():
             "resposta de 'proto' nao contem SIMHUB_1.0 — protocolo nao reconhecido"
 
         ledsc_reply = send_command(ser, b"ledsc", True, "ledsc")
-        assert ledsc_reply and str(LED_COUNT).encode() in ledsc_reply, \
-            f"resposta de 'ledsc' nao contem {LED_COUNT} — LED_COUNT do script != SIMHUB_LED_COUNT do firmware?"
+        match = re.search(rb"\d+", ledsc_reply or b"")
+        assert match, f"resposta de 'ledsc' nao contem um numero: {ledsc_reply!r}"
+        LED_COUNT = int(match.group())
+        print(f"[ledsc] LED_COUNT descoberto em runtime: {LED_COUNT}")
 
         # Payload de teste: LED 0 = vermelho puro, LED 1 = verde puro,
         # LED 2 = azul puro, demais = uma rampa crescente simples — dá pra
@@ -72,15 +74,23 @@ def main():
         ser.reset_input_buffer()
         ser.write(HEADER + b"sleds" + bytes(payload) + TERMINATOR)
         ser.flush()
-        print("[sleds] frame enviado, aguardando confirmacao do firmware...")
+        print("[sleds] frame enviado")
+        time.sleep(0.3)
 
-        time.sleep(2.5)
+        # DUMPLEDS é um comando de texto NOSSO (não faz parte do protocolo
+        # do SimHub) — pede pro firmware imprimir o framebuffer recebido,
+        # útil tanto no firmware de produção quanto no simhub-test isolado
+        # (que também imprime sozinho, mas responder ao DUMPLEDS não atrapalha).
+        ser.reset_input_buffer()
+        ser.write(b"DUMPLEDS\r\n")
+        ser.flush()
+        time.sleep(0.3)
         dump = ser.read(ser.in_waiting or 1).decode(errors="replace")
-        print("--- saida do firmware apos o 'sleds' ---")
+        print("--- resposta do DUMPLEDS ---")
         print(dump)
 
-        assert "CONECTADO" in dump or "LED0=" in dump, \
-            "firmware nao confirmou recebimento do 'sleds' (sem 'CONECTADO' nem dump de framebuffer)"
+        assert "LED0=" in dump, \
+            "firmware nao respondeu ao DUMPLEDS (build antiga sem esse comando?)"
         assert "LED0=(255,  0,  0)" in dump or "LED0=(255,0,0)" in dump.replace(" ", ""), \
             "LED0 nao chegou como (255,0,0) — RGB corrompido ou fora de ordem"
 

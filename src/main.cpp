@@ -249,6 +249,21 @@ static void serialCommands() {
           Serial.printf("LEDS_INVALID (1-%u)\n", (unsigned)SIMHUB_LED_COUNT_MAX);
         }
       }
+      else if (strcmp(line, "DUMPLEDS") == 0) {
+        // Comando NOSSO (nao faz parte do protocolo do SimHub) pra
+        // verificar o framebuffer recebido sem precisar da fita fisica
+        // acesa nem do firmware de teste isolado — util pra bancada.
+        const uint16_t n = simhub_get_led_count();
+        const uint16_t toShow = (n < 8) ? n : 8; // so os primeiros 8, pra nao floodar
+        Serial.printf("[dumpleds] conectado=%s total=%u ",
+                      simhub_is_connected() ? "sim" : "nao", (unsigned)n);
+        for (uint16_t i = 0; i < toShow; i++) {
+          const SimhubColor c = simhub_get_led(i);
+          Serial.printf("LED%u=(%3u,%3u,%3u) ", i, c.r, c.g, c.b);
+        }
+        if (n > toShow) Serial.printf("... (+%u LEDs)", (unsigned)(n - toShow));
+        Serial.println();
+      }
       else if (strcmp(line, "BOOTLOADER") == 0) {
         // Entra em modo download por software, dispensando segurar o botao
         // BOOT. Com ARDUINO_USB_MODE=0 o USB-Serial-JTAG some, e o esptool
