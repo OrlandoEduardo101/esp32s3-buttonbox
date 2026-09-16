@@ -40,11 +40,14 @@ build limpo, sem warnings de flags conflitantes.
   nenhuma fiação conectada).
 - Evidência: captura de tela do usuário mostrando exatamente esse estado.
 
-## 3. Botão 1 = BOOT físico
+## 3. Botão 1 = BOOT físico — **DESATUALIZADO, não vale mais**
 
-Segurar o botão BOOT da placa acende o Botão 1 no `joy.cpl`; soltar apaga.
-Evidência: comportamento implementado e testado nas mesmas sessões que
-validaram o heartbeat (mesmo `loop()`, mesma leitura de `digitalRead(PIN_BOOT)`).
+Válido só até a integração da camada `lib/inputs` (ver
+`docs/SYSTEM_INTEGRATION.md`): o BOOT **não alimenta mais nenhum bit do
+HID** — era um valor simulado de bring-up, substituído pelo
+`INPUT_BUTTON_01` real (MCP23017). O botão físico BOOT continua existindo
+só para abrir o portal de WiFi (segurar 5s). Mantido aqui riscado, em vez
+de apagado, pra não perder o histórico de por que existia.
 
 ## 4. CDC (porta COM) responde
 
@@ -97,6 +100,30 @@ Antes da correção (troca de `REG_WRITE(RTC_CNTL_OPTION1_REG, ...)` por
 permanentemente em bootloader — só um power-cycle físico (retirar a
 alimentação por completo) resolvia. **Qualquer regressão que volte a usar o
 registrador RTC diretamente reintroduz este bug.**
+
+## 9. Protocolo SimHub Standard Serial — ponta a ponta, na placa real
+
+Testado em 2026-09-15 com o firmware de produção já integrado (não o
+`simhub-test` isolado), via `scripts/simhub_test_send.py COM27` rodando no
+Windows do usuário, contra a placa real conectada por USB:
+
+```
+[proto] resposta crua: b'SIMHUB_1.0\r\n'
+[ledsc] resposta crua: b'80\r\n'
+[sleds] frame enviado
+[dumpleds] conectado=sim total=80 LED0=(255,  0,  0) LED1=(  0,255,  0)
+           LED2=(  0,  0,255) LED3=( 24, 24, 24) ... (+72 LEDs)
+OK: proto/ledsc responderam certo e o LED0 chegou como (255,0,0).
+```
+
+Confirma: handshake (`proto`/`ledsc`) responde certo, `sleds` é recebido e
+publicado no framebuffer com R/G/B na ordem certa (sem canais trocados),
+e a contagem de LEDs configurada via `SETLEDS` (80, gravada em NVS num
+teste anterior) **sobreviveu a um upload OTA** entre um teste e outro —
+confirma que a partição NVS não é afetada por atualização OTA. Ainda
+pendente: acender os LEDs físicos de verdade (matriz+fita não montadas
+no momento deste teste) — isso é o próximo passo, não uma falha deste
+teste.
 
 ---
 
