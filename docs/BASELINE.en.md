@@ -105,30 +105,35 @@ permanently trap the board in the bootloader — only a full physical power
 cycle (removing power entirely) would fix it. **Any regression that goes
 back to writing the RTC register directly reintroduces this bug.**
 
-## 9. SimHub Standard Serial protocol — end to end, on the real board
+## 9. SimHub protocol — recognized by SimHub itself (Arduino tab)
 
-Tested on 2026-09-15 with the already-integrated production firmware
-(not the isolated `simhub-test`), via `scripts/simhub_test_send.py COM27`
-running on the user's Windows machine, against the real board connected
-over USB:
+**Replaces the previous version of this item**, which documented evidence
+from the old, discarded protocol (`proto`/`ledsc`/`sleds` — see
+`docs/SIMHUB_PROTOCOL.en.md`, "Previous mistake" section). The current
+evidence is from the real protocol (ARQ transport + commands), tested on
+2026-09-16 directly in the user's SimHub (not just via
+`scripts/simhub_test_send.py`), with the already-integrated production
+firmware:
 
-```
-[proto] raw response: b'SIMHUB_1.0\r\n'
-[ledsc] raw response: b'80\r\n'
-[sleds] frame sent
-[dumpleds] connected=yes total=80 LED0=(255,  0,  0) LED1=(  0,255,  0)
-           LED2=(  0,  0,255) LED3=( 24, 24, 24) ... (+72 LEDs)
-OK: proto/ledsc responded correctly and LED0 arrived as (255,0,0).
-```
+- SimHub's **Arduino** tab showed the device as **`Connected`** (before:
+  `Unrecognized`/`Port not scanned` — see the correction history in
+  `docs/SIMHUB_PROTOCOL.en.md`).
+- **Connected device informations**: `Device name = ESP32S3-ButtonBox`,
+  `Firmware Revision = j`, `Features list = NIXR`, `RGB Leds = 10`,
+  `RGB Matrix = True`, `Unique Id = AC276ECCFAB8`.
+- **Communication statistics**: `FPS ≈ 55-58`, **`Corrupted = 0`**,
+  **`Reemited = 0`**, `Reemited af. wait = 0` — confirms the ARQ transport
+  (CRC8 checksum + per-packet acknowledgment) is healthy, not just that
+  the initial handshake worked.
+- Evidence: user's screenshot of SimHub's Arduino tab.
 
-Confirms: the handshake (`proto`/`ledsc`) responds correctly, `sleds` is
-received and published to the framebuffer with R/G/B in the right order
-(no swapped channels), and the LED count configured via `SETLEDS` (80,
-written to NVS in an earlier test) **survived an OTA upload** between one
-test and the next — confirming the NVS partition is unaffected by an OTA
-update. Still pending: actually lighting up the physical LEDs (matrix +
-strip weren't mounted at the time of this test) — that's the next step,
-not a failure of this test.
+Also confirmed in that session: the strip's LED count configured via
+`SETLEDS` (persisted in NVS) **survived an OTA upload** between one test
+and the next — the NVS partition is unaffected by an OTA update.
+
+Pending: actually lighting up the physical LEDs and configuring the
+effects inside SimHub (matrix + strip aren't physically mounted yet at
+the time of this test) — next step, not a failure of this test.
 
 ---
 

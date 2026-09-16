@@ -57,7 +57,7 @@ from previous stages and wasn't rewritten, only verified.
   after the function returns. Doesn't know about SimHub or telemetry
   (rule 9) — has its own `Ws2812Color` type.
 - **GPIO1** — new pinout decision: WS2812 data output (was free,
-  documented in `docs/INPUTS_PINOUT.md`).
+  documented in `docs/INPUTS_PINOUT.en.md`).
 - **`src/main.cpp`** — the only bridge between `lib/simhub` and
   `lib/ws2812` (~10 lines of glue in `loop()`: reads SimHub's framebuffer,
   converts it to the driver's type, sends it to the strip). Neither
@@ -124,7 +124,7 @@ chip/flash/PSRAM, not about the input/output pins).
 | `main.cpp`, `setup()` | 300ms | Only at boot, before `loop()` starts | Yes (original baseline) |
 | `main.cpp`, end of `loop()` | 5ms | Every iteration — it's the main loop's overall pace | Yes (original baseline) |
 | `mux4067_init()` | 30µs × channels in use | Only once, at initialization | Yes (74HC4067 stage) |
-| `simhub_process_packet()` (`readByteUntil`) | up to 100ms **total**, not per byte | Only when a SimHub frame has already started (6×0xFF header seen) and stalls midway | Yes (SimHub stage) — **not a `delay()`**, it's a busy-wait with a time budget, documented as an engineering decision in `docs/SIMHUB_PROTOCOL.md` |
+| `simhub_process_packet()` (`readByteUntil`) | up to 300ms **total**, not per byte | Only when an ARQ packet has already started (`0x01 0x01` header seen) and stalls midway | Yes (SimHub stage) — **not a `delay()`**, it's a busy-wait with a time budget, documented as an engineering decision in `docs/SIMHUB_PROTOCOL.en.md` |
 
 None of these are new in this stage. `ws2812_show()` (new) explicitly
 **does not** block — uses async `rmtWrite()`, not `rmtWriteBlocking()`.
@@ -134,9 +134,9 @@ None of these are new in this stage. `ws2812_show()` (new) explicitly
 During the window where WiFi is connected and OTA is already ready
 (`otaReady=true`) but no transfer is in progress (`otaRunning=false`), a
 corrupted/stalled SimHub frame can hold `serialCommands()` for up to
-100ms before the next `ArduinoOTA.handle()`. This doesn't break OTA (rule
+300ms before the next `ArduinoOTA.handle()`. This doesn't break OTA (rule
 4 is about *dependency*, not latency, and OTA's network handshake
-tolerates far more than 100ms of jitter), but it is a real latency
+tolerates far more than 300ms of jitter), but it is a real latency
 coupling between the two layers. Not changed now because (a) it's a rare
 case (SimHub would have to be sending corrupted/incomplete data and never
 complete it), (b) any fix would be a refactor of the already-validated
@@ -188,25 +188,17 @@ responsible layer before modifying code").
 | SW switches of the 4 encoders | Same, 4 buttons (12-15) | `mux-test` (74HC4067 directly) |
 | 4 encoders — CW/CCW | Each physical detent generates exactly 1 event in the correct direction | `encoder-test` (isolated quadrature decoder) |
 | Parking brake | State follows the lever's position | `mux-test` (channel C8) |
-| Ignition (3 positions) | ON and IGN correct, IGN only during cranking (see `docs/INPUTS_PINOUT.md` section 2) | `mcp-test` (GPB4/GPB5) |
+| Ignition (3 positions) | ON and IGN correct, IGN only during cranking (see `docs/INPUTS_PINOUT.en.md` section 2) | `mcp-test` (GPB4/GPB5) |
 | Start Engine | Button + LED (if already wired) | `mcp-test` (GPB3) for the button; the LED is separate wiring, no firmware involved |
 | 4 toggle switches | State follows the switch's position | `mux-test` (channels C4-C7) |
 | Multiple simultaneous buttons | No interference between bits (shouldn't be any — there's no matrix) | `inputs-test` (several inputs at once, check the log) |
-| HID on Windows | `joy.cpl` shows the 31 real controls + heartbeat on bit 32 | `docs/BASELINE.md` (original test) + `docs/INPUTS_PINOUT.md` section 10 (bit map) |
+| HID on Windows | `joy.cpl` shows the 31 real controls + heartbeat on bit 32 | `docs/BASELINE.en.md` (original test) + `docs/INPUTS_PINOUT.en.md` section 10 (bit map) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respond | Any serial terminal on the COM port |
-| SimHub — protocol | `proto`/`ledsc`/`sleds` respond correctly, RGB arrives correctly | `simhub-test` + `scripts/simhub_test_send.py` |
+| SimHub — protocol | ARQ handshake + commands (`'1'` Hello, `'0'` Features, `'4'`/`'6'` strip, `'R'` matrix) respond correctly, RGB arrives correctly — see `docs/SIMHUB_PROTOCOL.en.md` | `simhub-test` + `scripts/simhub_test_send.py` |
 | LEDs (WS2812) | Colors appear correctly on the matrix/strip, no flicker and no swapped channels (R/G/B) | `ws2812-test` (fixed color sweep, no SimHub) |
-| WiFi | Connects on its own, reconnects on its own, portal only via 5s BOOT hold | `docs/BASELINE.md` (already validated before, untouched) |
-| OTA | Full upload via `pio run -e ota -t upload`, HID keeps working during and after | `docs/BASELINE.md` (5 cycles already validated before this integration) |
+| WiFi | Connects on its own, reconnects on its own, portal only via 5s BOOT hold | `docs/BASELINE.en.md` (already validated before, untouched) |
+| OTA | Full upload via `pio run -e ota -t upload`, HID keeps working during and after | `docs/BASELINE.en.md` (5 cycles already validated before this integration) |
 | **HID + SimHub together** | Board connected on Windows as HID **and** in SimHub at the same time, neither interfering with the other | If it fails, isolate: first `simhub-test` alone (confirms the parser works), then the full binary — if only the full one fails, the problem is in the coexistence (`serialCommands()` dispatching to both protocols), not in any individual parser |
-
-> Note carried over unmodified from the Portuguese source: the "SimHub —
-> protocol" row above still refers to the `proto`/`ledsc`/`sleds` legacy
-> LED-sketch protocol. That protocol was later found not to be what
-> SimHub's "Arduino" tab actually speaks — see `docs/SIMHUB_PROTOCOL.en.md`
-> for the real ARQ + `0x03`-command protocol. This translation preserves
-> the source document's current (outdated) wording rather than silently
-> correcting it.
 
 ### Recommended bring-up order (minimizes the risk of not knowing which layer failed)
 

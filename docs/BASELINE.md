@@ -103,29 +103,34 @@ permanentemente em bootloader — só um power-cycle físico (retirar a
 alimentação por completo) resolvia. **Qualquer regressão que volte a usar o
 registrador RTC diretamente reintroduz este bug.**
 
-## 9. Protocolo SimHub Standard Serial — ponta a ponta, na placa real
+## 9. Protocolo SimHub — reconhecido pelo próprio SimHub (aba Arduino)
 
-Testado em 2026-09-15 com o firmware de produção já integrado (não o
-`simhub-test` isolado), via `scripts/simhub_test_send.py COM27` rodando no
-Windows do usuário, contra a placa real conectada por USB:
+**Substitui a versão anterior deste item**, que documentava evidência do
+protocolo antigo (`proto`/`ledsc`/`sleds`, descartado — ver
+`docs/SIMHUB_PROTOCOL.md`, seção "Erro anterior"). A evidência atual é do
+protocolo real (transporte ARQ + comandos), testado em 2026-09-16 direto
+no SimHub do usuário (não só via `scripts/simhub_test_send.py`), com o
+firmware de produção já integrado:
 
-```
-[proto] resposta crua: b'SIMHUB_1.0\r\n'
-[ledsc] resposta crua: b'80\r\n'
-[sleds] frame enviado
-[dumpleds] conectado=sim total=80 LED0=(255,  0,  0) LED1=(  0,255,  0)
-           LED2=(  0,  0,255) LED3=( 24, 24, 24) ... (+72 LEDs)
-OK: proto/ledsc responderam certo e o LED0 chegou como (255,0,0).
-```
+- Aba **Arduino** do SimHub mostrou o dispositivo como **`Connected`**
+  (antes: `Unrecognized`/`Port not scanned` — ver o histórico de correções
+  em `docs/SIMHUB_PROTOCOL.md`).
+- **Connected device informations**: `Device name = ESP32S3-ButtonBox`,
+  `Firmware Revision = j`, `Features list = NIXR`, `RGB Leds = 10`,
+  `RGB Matrix = True`, `Unique Id = AC276ECCFAB8`.
+- **Communication statistics**: `FPS ≈ 55-58`, **`Corrupted = 0`**,
+  **`Reemited = 0`**, `Reemited af. wait = 0` — confirma que o transporte
+  ARQ (checksum CRC8 + confirmação por pacote) está saudável, não só que
+  o handshake inicial funcionou.
+- Evidência: captura de tela do usuário na aba Arduino do SimHub.
 
-Confirma: handshake (`proto`/`ledsc`) responde certo, `sleds` é recebido e
-publicado no framebuffer com R/G/B na ordem certa (sem canais trocados),
-e a contagem de LEDs configurada via `SETLEDS` (80, gravada em NVS num
-teste anterior) **sobreviveu a um upload OTA** entre um teste e outro —
-confirma que a partição NVS não é afetada por atualização OTA. Ainda
-pendente: acender os LEDs físicos de verdade (matriz+fita não montadas
-no momento deste teste) — isso é o próximo passo, não uma falha deste
-teste.
+Também confirmado nessa sessão: a contagem de LEDs da fita configurada via
+`SETLEDS` (persistida em NVS) **sobreviveu a um upload OTA** entre um
+teste e outro — a partição NVS não é afetada por atualização OTA.
+
+Pendente: acender os LEDs físicos de verdade e configurar os efeitos
+dentro do SimHub (matriz+fita ainda não montadas fisicamente no momento
+deste teste) — próximo passo, não falha deste teste.
 
 ---
 

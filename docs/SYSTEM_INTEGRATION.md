@@ -123,7 +123,7 @@ chip/flash/PSRAM, não sobre os pinos de entrada/saída).
 | `main.cpp`, `setup()` | 300ms | Só no boot, antes do `loop()` começar | Sim (baseline original) |
 | `main.cpp`, fim do `loop()` | 5ms | Toda iteração — é o ritmo geral do laço principal | Sim (baseline original) |
 | `mux4067_init()` | 30µs × canais em uso | Só uma vez, na inicialização | Sim (etapa do 74HC4067) |
-| `simhub_process_packet()` (`readByteUntil`) | até 100ms **no total**, não por byte | Só quando um frame SimHub já começou (cabeçalho 6×0xFF visto) e trava no meio | Sim (etapa do SimHub) — **não é `delay()`**, é um busy-wait com orçamento de tempo, documentado como decisão de engenharia em `docs/SIMHUB_PROTOCOL.md` |
+| `simhub_process_packet()` (`readByteUntil`) | até 300ms **no total**, não por byte | Só quando um pacote ARQ já começou (cabeçalho `0x01 0x01` visto) e trava no meio | Sim (etapa do SimHub) — **não é `delay()`**, é um busy-wait com orçamento de tempo, documentado como decisão de engenharia em `docs/SIMHUB_PROTOCOL.md` |
 
 Nenhum desses é novo nesta etapa. `ws2812_show()` (novo) explicitamente
 **não** bloqueia — usa `rmtWrite()` assíncrono, não `rmtWriteBlocking()`.
@@ -133,10 +133,10 @@ Nenhum desses é novo nesta etapa. `ws2812_show()` (novo) explicitamente
 Durante a janela em que o WiFi está conectado e o OTA já está pronto
 (`otaReady=true`) mas nenhuma transferência está em andamento
 (`otaRunning=false`), um frame SimHub corrompido/travado no meio pode
-segurar `serialCommands()` por até 100ms antes do próximo
+segurar `serialCommands()` por até 300ms antes do próximo
 `ArduinoOTA.handle()`. Isso não quebra OTA (a regra 4 é sobre
 *dependência*, não sobre latência, e o handshake do OTA por rede tolera
-bem mais que 100ms de jitter) mas é um acoplamento de latência real entre
+bem mais que 300ms de jitter) mas é um acoplamento de latência real entre
 as duas camadas. Não alterado agora porque (a) é um caso raro
 (SimHub tem que estar mandando dado corrompido/incompleto e nunca
 completar), (b) qualquer mudança seria uma refatoração do parser SimHub
@@ -194,7 +194,7 @@ modificar código").
 | Múltiplos botões simultâneos | Sem interferência entre bits (não deveria haver — não há matriz) | `inputs-test` (várias entradas ao mesmo tempo, ver o log) |
 | HID no Windows | `joy.cpl` mostra os 31 controles reais + heartbeat no bit 32 | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respondem | Qualquer terminal serial na porta COM |
-| SimHub — protocolo | `proto`/`ledsc`/`sleds` respondem certo, RGB chega correto | `simhub-test` + `scripts/simhub_test_send.py` |
+| SimHub — protocolo | Handshake ARQ + comandos (`'1'` Hello, `'0'` Features, `'4'`/`'6'` fita, `'R'` matriz) respondem certo, RGB chega correto — ver `docs/SIMHUB_PROTOCOL.md` | `simhub-test` + `scripts/simhub_test_send.py` |
 | LEDs (WS2812) | Cores aparecem certas na matriz/fita, sem flicker nem cor trocada (R/G/B) | `ws2812-test` (varredura de cores fixas, sem SimHub) |
 | WiFi | Conecta sozinho, reconecta sozinho, portal só com BOOT 5s | `docs/BASELINE.md` (já validado antes, não mexido) |
 | OTA | Upload completo via `pio run -e ota -t upload`, HID continua funcionando durante e depois | `docs/BASELINE.md` (5 ciclos já validados antes desta integração) |
