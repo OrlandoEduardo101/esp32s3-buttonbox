@@ -1,3 +1,5 @@
+🇧🇷 Português | [🇺🇸 English](INPUTS_PINOUT.en.md)
+
 # INPUTS_PINOUT.md — Arquitetura de entradas do hardware final
 
 > Documento de definição de pinout — o **raciocínio** por trás de cada

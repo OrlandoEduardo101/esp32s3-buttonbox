@@ -1,3 +1,5 @@
+🇧🇷 Português | [🇺🇸 English](SIMHUB_PROTOCOL.en.md)
+
 # SIMHUB_PROTOCOL.md — Integração SimHub via CDC
 
 > Atualizado em 2026-09-16, depois de uma correção de rota. Ver a seção

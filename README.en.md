@@ -82,7 +82,7 @@ onto the case:
 
 - **[DIY Parking Brake for Truck Simulators](https://www.printables.com/model/995554-diy-parking-brake-for-truck-simulators/files)**
   (Printables) — the physical lever that drives `INPUT_HANDBRAKE` (see
-  [`docs/INPUTS_PINOUT.md`](docs/INPUTS_PINOUT.md) section 7 for how the
+  [`docs/INPUTS_PINOUT.en.md`](docs/INPUTS_PINOUT.en.md) section 7 for how the
   firmware handles that signal).
 - **Radio PTT button** — two options on Thingiverse:
   [thing:4740146](https://www.thingiverse.com/thing:4740146) and
@@ -137,7 +137,7 @@ Every arrow is an independent layer — none of them know the others'
 logic (e.g. the WS2812 driver has no idea what RPM is; the SimHub parser
 has no idea what a GPIO is). Full detail, including an audit of every
 isolation rule, in
-[`docs/SYSTEM_INTEGRATION.md`](docs/SYSTEM_INTEGRATION.md).
+[`docs/SYSTEM_INTEGRATION.en.md`](docs/SYSTEM_INTEGRATION.en.md).
 
 ## How to build and flash
 
@@ -200,12 +200,12 @@ commands (any serial terminal, 115200 baud):
 
 | File | Contents |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | USB (VID/PID/descriptors), HID, CDC, WiFi, OTA — how each baseline piece works |
-| [`docs/BASELINE.md`](docs/BASELINE.md) | Tests that demonstrably passed, with evidence |
-| [`docs/INPUTS_PINOUT.md`](docs/INPUTS_PINOUT.md) | Why each input went to the MCP23017/74HC4067/direct GPIO (the reasoning; current values live in `board_config.h`) |
-| [`docs/SIMHUB_PROTOCOL.md`](docs/SIMHUB_PROTOCOL.md) | SimHub's real protocol (ARQ transport + commands), with the investigation's dead ends recorded on purpose |
-| [`docs/SYSTEM_INTEGRATION.md`](docs/SYSTEM_INTEGRATION.md) | Final integration, cross-layer isolation audit, full test checklist |
-| [`HANDOFF.md`](HANDOFF.md) | Project history (including the earlier STM32 attempt, abandoned due to counterfeit hardware) |
+| [`docs/ARCHITECTURE.en.md`](docs/ARCHITECTURE.en.md) | USB (VID/PID/descriptors), HID, CDC, WiFi, OTA — how each baseline piece works |
+| [`docs/BASELINE.en.md`](docs/BASELINE.en.md) | Tests that demonstrably passed, with evidence |
+| [`docs/INPUTS_PINOUT.en.md`](docs/INPUTS_PINOUT.en.md) | Why each input went to the MCP23017/74HC4067/direct GPIO (the reasoning; current values live in `board_config.h`) |
+| [`docs/SIMHUB_PROTOCOL.en.md`](docs/SIMHUB_PROTOCOL.en.md) | SimHub's real protocol (ARQ transport + commands), with the investigation's dead ends recorded on purpose |
+| [`docs/SYSTEM_INTEGRATION.en.md`](docs/SYSTEM_INTEGRATION.en.md) | Final integration, cross-layer isolation audit, full test checklist |
+| [`HANDOFF.en.md`](HANDOFF.en.md) | Project history (including the earlier STM32 attempt, abandoned due to counterfeit hardware) |
 
 ## Deliberately not implemented
 

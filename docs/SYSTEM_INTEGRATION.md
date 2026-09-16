@@ -1,3 +1,5 @@
+🇧🇷 Português | [🇺🇸 English](SYSTEM_INTEGRATION.en.md)
+
 # SYSTEM_INTEGRATION.md — Integração final do sistema
 
 > Gerado em 2026-09-15. Cobre a arquitetura final pedida, a auditoria das

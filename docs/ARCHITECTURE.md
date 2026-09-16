@@ -1,3 +1,5 @@
+🇧🇷 Português | [🇺🇸 English](ARCHITECTURE.en.md)
+
 # ARCHITECTURE.md — Estado atual verificado (baseline pós-etapa 5)
 
 > Este documento descreve o firmware **exatamente como ele existe agora**, sem

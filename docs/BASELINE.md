@@ -1,3 +1,5 @@
+🇧🇷 Português | [🇺🇸 English](BASELINE.en.md)
+
 # BASELINE.md — Testes que comprovadamente passaram
 
 > Checklist de regressão para este firmware. Cada item abaixo foi observado
