@@ -215,3 +215,15 @@ Além do protocolo do SimHub, a mesma porta COM aceita comandos de texto
   dispositivo "Arduino" padrão, configurável inteiramente pela UI do
   SimHub.
 - Matriz de botões — cada entrada tem canal/pino próprio.
+
+## ☕ Apoie este projeto
+
+Se este projeto te ajudou ou economizou seu tempo, você pode apoiar:
+
+- PicPay: **@orlandoeduardo.pereira**
+- Link: https://picpay.me/orlandoeduardo.pereira
+- Link (PicPay): https://link.picpay.com/p/177377918669b9b8f2b4e25
+
+QR Code PIX:
+
+![QR Code PIX do PicPay](assets/img/pix.png)

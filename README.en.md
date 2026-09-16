@@ -215,3 +215,15 @@ commands (any serial terminal, 115200 baud):
 - SimHub's `SHCustomProtocol` — not used; the board shows up as a
   standard "Arduino" device, fully configurable from SimHub's own UI.
 - Button matrix — every input has its own channel/pin.
+
+## ☕ Support this project
+
+If this project helped you or saved you time, you can support it:
+
+- PicPay: **@orlandoeduardo.pereira**
+- Link: https://picpay.me/orlandoeduardo.pereira
+- Link (PicPay): https://link.picpay.com/p/177377918669b9b8f2b4e25
+
+PIX QR Code (PicPay, Brazil's instant payment system):
+
+![PicPay PIX QR Code](assets/img/pix.png)
