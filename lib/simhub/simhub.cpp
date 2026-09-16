@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <string.h>
+#include "class/cdc/cdc_device.h" // tud_cdc_n_write() — ver shWrite() abaixo
 
 namespace {
 
@@ -24,6 +25,42 @@ uint8_t g_matrix[SIMHUB_MATRIX_LED_COUNT * 3];
 uint16_t g_stripCount = SIMHUB_STRIP_COUNT_DEFAULT;
 bool     g_connected  = false;
 uint32_t g_lastActivityMs = 0;
+
+// --- Escrita das respostas do protocolo -------------------------------
+// NÃO usar Serial.write() aqui. O USBCDC::write() do core descarta tudo
+// silenciosamente quando `tud_cdc_n_connected()` é falso, e isso depende
+// do host ter assertado **DTR** (bit 0 do line state). O SimHub abre a
+// porta SEM assertar DTR — provavelmente de propósito, já que assertar
+// DTR reseta placas Arduino de verdade. Resultado: o firmware recebia o
+// Hello (RX não é filtrado), respondia 'j', e o byte morria dentro do
+// USBCDC antes de sair pro USB — o SimHub via silêncio e reportava
+// "Unrecognized". Foi exatamente isso que o log do usuário mostrou,
+// enquanto um script pyserial (que assere DTR por padrão) funcionava na
+// mesma porta, no mesmo firmware.
+//
+// Escrevendo direto pela TinyUSB o gate de DTR não se aplica: os bytes
+// vão pro FIFO do endpoint e saem quando o host fizer o polling.
+constexpr uint8_t CDC_ITF = 0; // `Serial` é USBCDC(0) no core Arduino-ESP32
+constexpr uint32_t WRITE_TIMEOUT_MS = 50;
+
+void shWrite(const uint8_t *data, size_t len) {
+  size_t sent = 0;
+  const uint32_t deadline = millis() + WRITE_TIMEOUT_MS;
+
+  while (sent < len && (int32_t)(millis() - deadline) < 0) {
+    const uint32_t n = tud_cdc_n_write(CDC_ITF, data + sent, len - sent);
+    sent += n;
+    tud_cdc_n_write_flush(CDC_ITF);
+  }
+}
+
+void shWriteByte(uint8_t b) {
+  shWrite(&b, 1);
+}
+
+void shPrint(const char *s) {
+  shWrite((const uint8_t *)s, strlen(s));
+}
 
 // Lê um byte da serial esperando até 'deadlineMs'. -1 se estourar o prazo.
 // Comparação segura contra wraparound de millis().
@@ -149,8 +186,7 @@ void simhub_process_packet() {
     case '1': { // Hello
       readByteUntil(deadline); // byte de trailer, descartado
       delay(10);               // mesma pausa das implementacoes de referencia
-      Serial.write((uint8_t)SIMHUB_VERSION_CHAR);
-      Serial.flush();
+      shWriteByte((uint8_t)SIMHUB_VERSION_CHAR);
       break;
     }
 
@@ -159,35 +195,30 @@ void simhub_process_packet() {
       // N = nome, I = unique id, X = comandos expandidos, R = matriz RGB.
       // Sem "P" (SHCustomProtocol, excluido de proposito), sem "J"/"G"
       // (botoes e marcha vao pelo HID nativo, nao por este protocolo).
-      Serial.print("NIXR\n");
-      Serial.flush();
+      shPrint("NIXR\n");
       break;
     }
 
     case '4': { // Quantidade de LEDs da fita
-      Serial.write((uint8_t)g_stripCount);
-      Serial.flush();
+      shWriteByte((uint8_t)g_stripCount);
       break;
     }
 
     case '6': { // Dados RGB da fita
       readRgbStream(g_strip, g_stripCount, deadline);
-      Serial.write(ACK_BYTE);
-      Serial.flush();
+      shWriteByte(ACK_BYTE);
       break;
     }
 
     case 'R': { // Dados RGB da matriz 8x8
       readRgbStream(g_matrix, SIMHUB_MATRIX_LED_COUNT, deadline);
-      Serial.write(ACK_BYTE);
-      Serial.flush();
+      shWriteByte(ACK_BYTE);
       break;
     }
 
     case 'N': { // Nome do dispositivo
-      Serial.print(SIMHUB_DEVICE_NAME);
-      Serial.print("\n");
-      Serial.flush();
+      shPrint(SIMHUB_DEVICE_NAME);
+      shPrint("\n");
       break;
     }
 
@@ -197,48 +228,43 @@ void simhub_process_packet() {
       char id[13];
       snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X",
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-      Serial.print(id);
-      Serial.print("\n");
-      Serial.flush();
+      shPrint(id);
+      shPrint("\n");
       break;
     }
 
     case 'A': { // Acq
-      Serial.write((uint8_t)0x03);
-      Serial.flush();
+      shWriteByte((uint8_t)0x03);
       break;
     }
 
     case 'X': { // Comandos expandidos
       const String action = readStringUntil(' ', '\n', deadline);
       if (action == "list") {
-        Serial.print("mcutype\n");
-        Serial.print("keepalive\n");
-        Serial.print("\n");
+        shPrint("mcutype\n");
+        shPrint("keepalive\n");
+        shPrint("\n");
       } else if (action == "mcutype") {
-        Serial.write(SIGNATURE_0);
-        Serial.write(SIGNATURE_1);
-        Serial.write(SIGNATURE_2);
+        shWriteByte(SIGNATURE_0);
+        shWriteByte(SIGNATURE_1);
+        shWriteByte(SIGNATURE_2);
       } else {
         // keepalive e qualquer outro subcomando: só confirma.
-        Serial.write(ACK_BYTE);
+        shWriteByte(ACK_BYTE);
       }
-      Serial.flush();
       break;
     }
 
     case 'J':   // Botoes lidos por serial: nenhum (vao por HID nativo)
     case '2':   // Modulos TM1638: nenhum
     case 'B': { // Modulos simples: nenhum
-      Serial.write((uint8_t)0);
-      Serial.flush();
+      shWriteByte((uint8_t)0);
       break;
     }
 
     case 'G': { // Marcha — nao anunciamos 'G', mas respondemos se vier
       readByteUntil(deadline);
-      Serial.write(ACK_BYTE);
-      Serial.flush();
+      shWriteByte(ACK_BYTE);
       break;
     }
 
