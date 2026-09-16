@@ -35,19 +35,20 @@ Confirmado por captura de tela real do usuário (joy.cpl com 32 pontos, botão
 
 - **VID = `0x303A`** (Espressif Systems) — fixo, vem do core (`USB_ESPRESSIF_VID`
   em `esp32-hal-tinyusb.h`), nunca sobrescrito neste projeto.
-- **PID = `0x0002`** — default do core Arduino-ESP32 (`USB.cpp`:
-  `#ifndef USB_PID #define USB_PID 0x0002`). Confirmado por
-  `compile_commands.json`: **nenhuma flag `-DUSB_PID` existe em lugar nenhum
-  do build atual**, logo o app roda com o PID default.
+- **PID = `0x1001`** — vem de `variants/esp32s3/pins_arduino.h`
+  (`#define USB_PID 0x1001`), que é incluído **antes** do fallback do
+  `USB.cpp` (`#ifndef USB_PID #define USB_PID 0x0002`). Como o board.json
+  deste projeto usa `"variant": "esp32s3"`, o define do variant vence e o
+  app enumera como **`303A:1001`**.
 
-  > Nota importante para não confundir: capturas de `device list` que mostram
-  > `VID:PID=303A:1001` **não são o descriptor HID/CDC do app**. `303A:1001` é
-  > o VID/PID fixo, sempre-presente, da interface **USB-Serial-JTAG** do
-  > próprio chip ESP32-S3 (function-fixed, description "USB JTAG/serial debug
-  > unit") — uma interface de baixo nível separada, que só aparece quando o
-  > `esptool`/PlatformIO reseta a placa em modo bootloader. O device do app
-  > (TinyUSB, `ARDUINO_USB_MODE=0`) usa `303A:0002` e o nome de produto
-  > `ESP32S3-SimHub-ButtonBox`.
+  > **CORREÇÃO (2026-09-16).** A versão anterior deste documento afirmava
+  > que o PID era `0x0002` e que qualquer `303A:1001` visto em `device
+  > list` seria "a interface USB-Serial-JTAG separada". **As duas
+  > afirmações estavam erradas.** O erro veio de verificar só o
+  > `compile_commands.json` (onde de fato não há `-DUSB_PID`) e concluir
+  > dali, sem checar o header do variant. Consequência prática: ver
+  > `303A:1001` numa porta **não** significa que a placa está em modo
+  > bootloader — é o app rodando normalmente.
 
 ## 3. Manufacturer
 

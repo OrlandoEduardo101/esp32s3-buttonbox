@@ -221,12 +221,11 @@ static void serialCommands() {
   while (Serial.available() > 0) {
     const uint8_t raw = (uint8_t)Serial.read();
 
-    if (simhub_feed_header_byte(raw)) {
+    if (simhub_is_header_byte(raw)) {
       simhub_process_packet();
       len = 0;
       continue;
     }
-    if (raw == 0xFF) continue; // prefixo parcial de cabecalho SimHub — nunca e texto valido
 
     const char c = (char)raw;
     if (c == '\r') continue;
@@ -237,31 +236,37 @@ static void serialCommands() {
       else if (strcmp(line, "VERSION") == 0) Serial.println("ESP32S3_BUTTONBOX_HID_OTA");
       else if (strcmp(line, "IP") == 0)      Serial.println(WiFi.localIP().toString());
       else if (strncmp(line, "SETLEDS ", 8) == 0) {
-        // Troca em runtime quantos LEDs o firmware anuncia via "ledsc" do
-        // protocolo SimHub (lib/simhub) — persiste em NVS, sobrevive a
-        // reboot. Existe pra nao precisar recompilar/regravar toda vez
-        // que a contagem exata da fita/matriz mudar. Ver
-        // docs/SIMHUB_PROTOCOL.md.
+        // Quantos LEDs tem a FITA (a matriz e' fixa em 8x8 = 64 pelo
+        // proprio protocolo do SimHub). Persiste em NVS, sobrevive a
+        // reboot — existe pra nao precisar recompilar quando a contagem
+        // exata da fita mudar. Ver docs/SIMHUB_PROTOCOL.md.
         const int n = atoi(line + 8);
-        if (n > 0 && simhub_set_led_count((uint16_t)n)) {
+        if (n > 0 && simhub_set_strip_count((uint16_t)n)) {
           Serial.printf("LEDS_SET %d\n", n);
         } else {
-          Serial.printf("LEDS_INVALID (1-%u)\n", (unsigned)SIMHUB_LED_COUNT_MAX);
+          Serial.printf("LEDS_INVALID (1-%u)\n", (unsigned)SIMHUB_STRIP_COUNT_MAX);
         }
       }
       else if (strcmp(line, "DUMPLEDS") == 0) {
         // Comando NOSSO (nao faz parte do protocolo do SimHub) pra
-        // verificar o framebuffer recebido sem precisar da fita fisica
-        // acesa nem do firmware de teste isolado — util pra bancada.
-        const uint16_t n = simhub_get_led_count();
-        const uint16_t toShow = (n < 8) ? n : 8; // so os primeiros 8, pra nao floodar
-        Serial.printf("[dumpleds] conectado=%s total=%u ",
-                      simhub_is_connected() ? "sim" : "nao", (unsigned)n);
+        // verificar os framebuffers recebidos sem precisar dos LEDs
+        // fisicos acesos — util pra bancada.
+        const uint16_t strip = simhub_get_strip_count();
+        Serial.printf("[dumpleds] conectado=%s matriz=%u fita=%u\n",
+                      simhub_is_connected() ? "sim" : "nao",
+                      (unsigned)SIMHUB_MATRIX_LED_COUNT, (unsigned)strip);
+        Serial.print("[dumpleds] matriz ");
+        for (uint16_t i = 0; i < 4; i++) {
+          const SimhubColor c = simhub_get_matrix_led(i);
+          Serial.printf("M%u=(%3u,%3u,%3u) ", i, c.r, c.g, c.b);
+        }
+        Serial.println();
+        Serial.print("[dumpleds] fita ");
+        const uint16_t toShow = (strip < 4) ? strip : 4;
         for (uint16_t i = 0; i < toShow; i++) {
-          const SimhubColor c = simhub_get_led(i);
+          const SimhubColor c = simhub_get_strip_led(i);
           Serial.printf("LED%u=(%3u,%3u,%3u) ", i, c.r, c.g, c.b);
         }
-        if (n > toShow) Serial.printf("... (+%u LEDs)", (unsigned)(n - toShow));
         Serial.println();
       }
       else if (strcmp(line, "BOOTLOADER") == 0) {
@@ -321,7 +326,8 @@ void setup() {
   // Protocolo Standard Serial do SimHub, sobre a mesma CDC — nao mexe no
   // Serial.begin() em si (ja chamado acima), so zera o estado do parser.
   simhub_init();
-  Serial.printf("[simhub] pronto, anunciando %u LEDs (ledsc)\n", simhub_get_led_count());
+  Serial.printf("[simhub] pronto: matriz 8x8 (%u) + fita (%u)\n",
+                (unsigned)SIMHUB_MATRIX_LED_COUNT, (unsigned)simhub_get_strip_count());
 
   // Driver da fita/matriz WS2812 — so desenha o que o framebuffer do
   // SimHub tiver; nao sabe (nem precisa saber) o que cada pixel significa.
@@ -357,15 +363,41 @@ void loop() {
   // como ws2812_show() e' assincrono (rmtWrite, nao bloqueia) e o loop ja
   // tem um piso de ~5ms (delay(5) no final), isso nunca chama de novo
   // antes da transmissao anterior (~2,2ms para 74 LEDs) terminar.
+  //
+  // Layout fisico: UMA cadeia WS2812 so — a matriz 8x8 primeiro (pixels
+  // 0-63), a fita logo depois (DOUT da matriz -> DIN da fita). Pro SimHub
+  // eles continuam sendo dois dispositivos logicos separados (RGB Matrix e
+  // RGB Leds); quem junta os dois numa cadeia unica e' este trecho.
   {
     static Ws2812Color ledBuf[WS2812_MAX_LEDS];
-    const uint16_t ledCount = simhub_get_led_count();
-    const uint16_t toShow = (ledCount > WS2812_MAX_LEDS) ? WS2812_MAX_LEDS : ledCount;
-    for (uint16_t i = 0; i < toShow; i++) {
-      const SimhubColor c = simhub_get_led(i);
-      ledBuf[i] = {c.r, c.g, c.b};
+
+    // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
+    // Paineis 8x8 de WS2812 quase sempre sao ligados em serpentina (linhas
+    // alternadas invertidas) — MATRIX_SERPENTINE faz esse remapeamento.
+    // Se a sua matriz for ligada em linhas retas, e' so por false aqui.
+    static const bool MATRIX_SERPENTINE = true;
+    for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
+      uint16_t phys = i;
+      if (MATRIX_SERPENTINE) {
+        const uint16_t y = i / 8;
+        uint16_t x = i % 8;
+        if ((y % 2) == 0) x = 7 - x;
+        phys = y * 8 + x;
+      }
+      const SimhubColor c = simhub_get_matrix_led(i);
+      ledBuf[phys] = {c.r, c.g, c.b};
     }
-    ws2812_show(ledBuf, toShow);
+
+    // Fita, logo depois da matriz na mesma cadeia.
+    const uint16_t stripCount = simhub_get_strip_count();
+    uint16_t total = SIMHUB_MATRIX_LED_COUNT + stripCount;
+    if (total > WS2812_MAX_LEDS) total = WS2812_MAX_LEDS;
+    for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
+      const SimhubColor c = simhub_get_strip_led(j);
+      ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {c.r, c.g, c.b};
+    }
+
+    ws2812_show(ledBuf, total);
   }
 
   static uint32_t buttons    = 0;

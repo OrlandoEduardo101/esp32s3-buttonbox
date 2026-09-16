@@ -1,40 +1,37 @@
-# Envia o protocolo Standard Serial do SimHub pra placa (firmware
-# esp32s3-supermini ou simhub-test) e confere as respostas — verificação
-# manual de ponta a ponta pro criterio de sucesso desta integracao ("e
-# possivel enviar dados Standard Protocol... e confirmar que os valores
-# RGB foram recebidos corretamente"), sem precisar instalar o SimHub.
+# Fala o protocolo REAL do SimHub (aba "Arduino") com a placa e confere as
+# respostas — verificacao de ponta a ponta sem precisar abrir o SimHub.
+#
+# Protocolo: 0x03 (MESSAGE_HEADER) + 1 char de comando + payload.
+# Referencia: docs/SIMHUB_PROTOCOL.md (extraido de ESP-SimHub, que
+# comprovadamente funciona com o SimHub).
 #
 # Uso:
+#   python scripts/simhub_test_send.py COM27
 #   ~/.platformio/penv/bin/python scripts/simhub_test_send.py /dev/cu.usbmodemXXXX
-#
-# (usa o Python do PlatformIO, que ja tem pyserial; ou "pip install
-# pyserial" num Python qualquer)
-#
-# A contagem de LEDs é descoberta em runtime via "ledsc" (não fica mais
-# fixa no script) — reflete o que estiver gravado em NVS na placa,
-# ajustável a qualquer momento com o comando serial "SETLEDS <n>" (ver
-# docs/SIMHUB_PROTOCOL.md). Não precisa mais manter esse número
-# sincronizado à mão entre o script e o firmware.
-import re
 import sys
 import time
 import serial
 
-HEADER = bytes([0xFF] * 6)
-TERMINATOR = bytes([0xFF, 0xFE, 0xFD])
+HEADER = b"\x03"
+ACK = 0x15
+MATRIX_LEDS = 64  # 8x8, fixo no protocolo do SimHub
 
 
-def send_command(ser, cmd: bytes, expect_reply: bool, label: str):
+def send(ser, cmd: bytes, payload: bytes = b""):
     ser.reset_input_buffer()
-    ser.write(HEADER + cmd)
+    ser.write(HEADER + cmd + payload)
     ser.flush()
-    if not expect_reply:
-        print(f"[{label}] enviado, sem resposta esperada")
-        return None
-    time.sleep(0.2)
-    reply = ser.read(ser.in_waiting or 1)
-    print(f"[{label}] resposta crua: {reply!r}")
-    return reply
+    time.sleep(0.25)
+    return ser.read(ser.in_waiting or 1)
+
+
+def rgb_stream_mode1(colors):
+    """modo 1 = todos os LEDs em sequencia, terminado por um byte 0."""
+    out = bytearray([1])
+    for (r, g, b) in colors:
+        out += bytes([r, g, b])
+    out += bytes([0])  # fim do stream
+    return bytes(out)
 
 
 def main():
@@ -42,59 +39,55 @@ def main():
         print(f"uso: {sys.argv[0]} <porta serial>")
         sys.exit(1)
 
-    port = sys.argv[1]
-    with serial.Serial(port, 115200, timeout=1) as ser:
-        time.sleep(2)  # tempo pro CDC nativo estabilizar depois de abrir a porta
+    with serial.Serial(sys.argv[1], 115200, timeout=1) as ser:
+        time.sleep(2)  # CDC nativo estabilizar
 
-        proto_reply = send_command(ser, b"proto", True, "proto")
-        assert proto_reply and b"SIMHUB_1.0" in proto_reply, \
-            "resposta de 'proto' nao contem SIMHUB_1.0 — protocolo nao reconhecido"
+        # --- Hello: 0x03 '1' <trailer> -> responde o char de versao -----
+        reply = send(ser, b"1", b"\x00")
+        print(f"[hello]    {reply!r}")
+        assert b"j" in reply, "Hello nao respondeu o char de versao 'j'"
 
-        ledsc_reply = send_command(ser, b"ledsc", True, "ledsc")
-        match = re.search(rb"\d+", ledsc_reply or b"")
-        assert match, f"resposta de 'ledsc' nao contem um numero: {ledsc_reply!r}"
-        LED_COUNT = int(match.group())
-        print(f"[ledsc] LED_COUNT descoberto em runtime: {LED_COUNT}")
+        # --- Features: 0x03 '0' -> letras de capacidade + \n ------------
+        reply = send(ser, b"0")
+        print(f"[features] {reply!r}")
+        assert b"R" in reply, "Features nao anuncia 'R' (RGB Matrix)"
+        assert b"P" not in reply, "Features anuncia 'P' (SHCustomProtocol) — nao deveria"
 
-        # Payload de teste: LED 0 = vermelho puro, LED 1 = verde puro,
-        # LED 2 = azul puro, demais = uma rampa crescente simples — dá pra
-        # conferir visualmente no dump do firmware que R/G/B chegaram nos
-        # bytes certos, na ordem certa, sem trocar canais.
-        payload = bytearray(LED_COUNT * 3)
-        if LED_COUNT > 0:
-            payload[0:3] = bytes([255, 0, 0])
-        if LED_COUNT > 1:
-            payload[3:6] = bytes([0, 255, 0])
-        if LED_COUNT > 2:
-            payload[6:9] = bytes([0, 0, 255])
-        for i in range(3, LED_COUNT):
-            v = (i * 8) % 256
-            payload[i * 3:i * 3 + 3] = bytes([v, v, v])
+        # --- Contagem de LEDs da fita: 0x03 '4' -> 1 byte ---------------
+        reply = send(ser, b"4")
+        assert len(reply) >= 1, "comando '4' nao respondeu a contagem da fita"
+        strip_count = reply[0]
+        print(f"[fita]     {strip_count} LEDs")
 
-        ser.reset_input_buffer()
-        ser.write(HEADER + b"sleds" + bytes(payload) + TERMINATOR)
-        ser.flush()
-        print("[sleds] frame enviado")
-        time.sleep(0.3)
+        # --- Dados RGB da fita: 0x03 '6' + stream -> ACK 0x15 -----------
+        strip_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        strip_colors += [((i * 8) % 256,) * 3 for i in range(3, strip_count)]
+        reply = send(ser, b"6", rgb_stream_mode1(strip_colors[:strip_count]))
+        print(f"[fita RGB] {reply!r}")
+        assert ACK in reply, "comando '6' nao respondeu ACK 0x15"
 
-        # DUMPLEDS é um comando de texto NOSSO (não faz parte do protocolo
-        # do SimHub) — pede pro firmware imprimir o framebuffer recebido,
-        # útil tanto no firmware de produção quanto no simhub-test isolado
-        # (que também imprime sozinho, mas responder ao DUMPLEDS não atrapalha).
+        # --- Dados RGB da matriz: 0x03 'R' + stream -> ACK 0x15 ---------
+        matrix_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        matrix_colors += [(0, 0, 0)] * (MATRIX_LEDS - 3)
+        reply = send(ser, b"R", rgb_stream_mode1(matrix_colors))
+        print(f"[matriz]   {reply!r}")
+        assert ACK in reply, "comando 'R' nao respondeu ACK 0x15"
+
+        # --- Confirma o que chegou nos framebuffers ---------------------
         ser.reset_input_buffer()
         ser.write(b"DUMPLEDS\r\n")
         ser.flush()
-        time.sleep(0.3)
+        time.sleep(0.4)
         dump = ser.read(ser.in_waiting or 1).decode(errors="replace")
-        print("--- resposta do DUMPLEDS ---")
+        print("--- DUMPLEDS ---")
         print(dump)
 
-        assert "LED0=" in dump, \
-            "firmware nao respondeu ao DUMPLEDS (build antiga sem esse comando?)"
+        assert "M0=(255,  0,  0)" in dump or "M0=(255,0,0)" in dump.replace(" ", ""), \
+            "matriz: M0 nao chegou como (255,0,0)"
         assert "LED0=(255,  0,  0)" in dump or "LED0=(255,0,0)" in dump.replace(" ", ""), \
-            "LED0 nao chegou como (255,0,0) — RGB corrompido ou fora de ordem"
+            "fita: LED0 nao chegou como (255,0,0)"
 
-        print("\nOK: proto/ledsc responderam certo e o LED0 chegou como (255,0,0).")
+        print("\nOK: handshake, features, fita e matriz responderam corretamente.")
 
 
 if __name__ == "__main__":
