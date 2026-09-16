@@ -1,0 +1,3 @@
+﻿[2026-09-16 05:49:45,399] INFO - Debug logging enabled
+[2026-09-16 05:49:45,402] DEBUG - Debug logging enabled
+[2026-09-16 05:49:45,402] DEBUG - Newtonsoft.Json OK: 13.0.4.30916 (13.0.4.*) from D:\games\SimHub\Newtonsoft.Json.dll
