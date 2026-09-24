@@ -38,6 +38,28 @@ static const uint16_t WS2812_MAX_LEDS = 256;
 // coisa — não é o caso aqui, mas o retorno existe pra não mascarar isso).
 bool ws2812_init(uint8_t pin = WS2812_DEFAULT_PIN);
 
+// Limitador global de brilho, em PORCENTAGEM. Escala cada canal (R, G, B)
+// proporcionalmente — nao "corta" o valor maximo, o que deformaria as
+// cores (vermelho 255 + verde 128 a 60% vira 153 + 77, mesma proporcao).
+// Vale para TUDO que chega na fita: cores do SimHub e animacao de espera.
+// Faixa permitida 25-75%, padrao 60%. Existe pra limitar consumo/calor:
+// 74 LEDs em branco cheio puxam ~4,4 A; a 60% o pico cai pra ~2,7 A.
+static const uint8_t WS2812_BRIGHTNESS_MIN_PCT     = 25;
+static const uint8_t WS2812_BRIGHTNESS_MAX_PCT     = 75;
+static const uint8_t WS2812_BRIGHTNESS_DEFAULT_PCT = 60;
+
+// Escala um canal (0-255) por 'pct' porcento. Pura, testavel no PC.
+static inline uint8_t ws2812_scale_channel(uint8_t value, uint8_t pct) {
+  return (uint8_t)(((uint16_t)value * (uint16_t)(pct * 256u / 100u)) >> 8);
+}
+
+// Define o limite de brilho. 'percent' fora de 25-75 e' grampeado para o
+// limite mais proximo. Devolve o valor realmente aplicado. So mexe em RAM
+// (persistencia em NVS e' responsabilidade de quem chama).
+uint8_t ws2812_set_brightness(uint8_t percent);
+uint8_t ws2812_get_brightness();
+
+
 // Manda um frame inteiro pra fita. count > WS2812_MAX_LEDS é truncado pro
 // máximo (os LEDs além do teto simplesmente não são atualizados).
 // NÃO BLOQUEIA: usa rmtWrite() (assíncrono) — a transmissão real acontece

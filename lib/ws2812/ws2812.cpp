@@ -20,6 +20,8 @@ constexpr uint8_t T0L_TICKS = 8; // 0.8us
 constexpr uint8_t T1H_TICKS = 8; // 0.8us
 constexpr uint8_t T1L_TICKS = 4; // 0.4us
 
+uint8_t g_brightnessPct = WS2812_BRIGHTNESS_DEFAULT_PCT;
+
 } // namespace
 
 bool ws2812_init(uint8_t pin) {
@@ -29,6 +31,17 @@ bool ws2812_init(uint8_t pin) {
   }
   rmtSetTick(g_rmt, 100); // 100ns por tick, mesma base do neopixelWrite()
   return true;
+}
+
+uint8_t ws2812_set_brightness(uint8_t percent) {
+  if (percent < WS2812_BRIGHTNESS_MIN_PCT) percent = WS2812_BRIGHTNESS_MIN_PCT;
+  if (percent > WS2812_BRIGHTNESS_MAX_PCT) percent = WS2812_BRIGHTNESS_MAX_PCT;
+  g_brightnessPct = percent;
+  return g_brightnessPct;
+}
+
+uint8_t ws2812_get_brightness() {
+  return g_brightnessPct;
 }
 
 void ws2812_show(const Ws2812Color *colors, uint16_t count) {
@@ -42,7 +55,11 @@ void ws2812_show(const Ws2812Color *colors, uint16_t count) {
   uint32_t bit = 0;
   for (uint16_t i = 0; i < count; i++) {
     // WS2812 espera a ordem GRB no fio, não RGB.
-    const uint8_t channels[3] = {colors[i].g, colors[i].r, colors[i].b};
+    const uint8_t channels[3] = {
+      ws2812_scale_channel(colors[i].g, g_brightnessPct),
+      ws2812_scale_channel(colors[i].r, g_brightnessPct),
+      ws2812_scale_channel(colors[i].b, g_brightnessPct),
+    };
     for (uint8_t c = 0; c < 3; c++) {
       for (int8_t b = 7; b >= 0; b--) {
         const bool one = (channels[c] >> b) & 0x1;
