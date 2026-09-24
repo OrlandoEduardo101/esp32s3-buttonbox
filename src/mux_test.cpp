@@ -14,22 +14,29 @@
 //   não exige os 16.
 #include <Arduino.h>
 #include "mux4067.h"
+#include "board_config.h" // pinos e numero de canais — mapa unico do projeto
 
-static const uint8_t CHANNEL_COUNT = 9; // C0-C8, mapa aprovado
+static const uint8_t CHANNEL_COUNT = BOARD_MUX_CHANNEL_COUNT; // C0-C14
 
 // Rótulos na mesma ordem dos bits de mux4067_get_state() (docs/INPUTS_
-// PINOUT.md secao 3): C0-C3 = SW dos encoders, C4-C7 = chaves caça, C8 =
-// microswitch do freio de estacionamento.
+// PINOUT.md secao 3): C0-C10 = push buttons, C11 = start engine, C12/C13 =
+// ignição, C14 = microswitch do freio de estacionamento.
 static const char *const CHANNEL_LABEL[CHANNEL_COUNT] = {
-  "C0 Encoder 1 SW",
-  "C1 Encoder 2 SW",
-  "C2 Encoder 3 SW",
-  "C3 Encoder 4 SW",
-  "C4 Chave caca 1",
-  "C5 Chave caca 2",
-  "C6 Chave caca 3",
-  "C7 Chave caca 4",
-  "C8 Microswitch freio de estacionamento",
+  "C0  Push button 1",
+  "C1  Push button 2",
+  "C2  Push button 3",
+  "C3  Push button 4",
+  "C4  Push button 5",
+  "C5  Push button 6",
+  "C6  Push button 7",
+  "C7  Push button 8",
+  "C8  Push button 9",
+  "C9  Push button 10",
+  "C10 Push button 11",
+  "C11 Start Engine",
+  "C12 Ignicao ON",
+  "C13 Ignicao IGN",
+  "C14 Microswitch freio de estacionamento",
 };
 
 static uint16_t lastPrinted = 0x0000;
@@ -58,9 +65,11 @@ void setup() {
   delay(300);
   Serial.println("\n=== Teste isolado 74HC4067 (mux4067) ===");
 
-  mux4067_init(MUX4067_DEFAULT_S0_PIN, MUX4067_DEFAULT_S1_PIN,
-               MUX4067_DEFAULT_S2_PIN, MUX4067_DEFAULT_S3_PIN,
-               MUX4067_DEFAULT_SIG_PIN, CHANNEL_COUNT);
+  // Pinos do board_config, NAO os defaults do driver: os defaults sao
+  // 15/16/17/18/21, que nesta placa sao pads da face inferior — usa-los aqui
+  // faria o teste varrer pinos que nem estao ligados no mux.
+  mux4067_init(BOARD_MUX_S0_PIN, BOARD_MUX_S1_PIN, BOARD_MUX_S2_PIN,
+               BOARD_MUX_S3_PIN, BOARD_MUX_SIG_PIN, CHANNEL_COUNT);
 
   Serial.println("Mapa de canais varridos (C9-C15 ficam de fora de "
                   "propósito, sao livres/nao fiados ainda):");

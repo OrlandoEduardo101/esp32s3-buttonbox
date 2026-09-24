@@ -16,65 +16,104 @@
 
 ## Why this distribution
 
-- **Direct ESP32-S3 GPIO**: reserved for what needs the lowest latency
-  and interrupt-driven reads — the 8 CLK/DT signals of the 4 encoders
-  (quadrature requires fast, delay-sensitive decoding) and the I2C bus +
-  interrupt line for the MCP23017.
-- **MCP23017 (I2C, with interrupt)**: reserved for the most frequent/
-  critical "action" inputs — the 11 push buttons, the Start Engine
-  button, and the ignition key. The MCP supports interrupt-on-change
-  (INTA/INTB) and internal pull-up on all 16 pins, so the ESP32 doesn't
-  poll: it only wakes up when something changes, with debounce done in
-  firmware on top of the event.
-- **74HC4067 (analog/digital mux, no interrupt)**: reserved for state
-  inputs that change slowly and tolerate polling-based scanning — the 4
-  encoder SW switches (built-in button click), the 4 toggle switches, and
-  the parking brake microswitch. No interrupt of its own, but scanning 9
-  channels is trivially fast (ESP32-S3 at 240 MHz), and none of these
-  inputs demand a response within a few milliseconds.
-- Both expanders keep free channels (2 on the MCP, 7 on the mux) for
-  future expansion without redesigning the pinout.
+> **Revision 2 (Sep 2026) — the pinout changed.** Revision 1 put the 8
+> quadrature signals on direct GPIO and the five 74HC4067 control lines on
+> GPIO 15, 16, 17, 18 and 21. On the **ESP32-S3 SuperMini** those five are
+> not header pins: they come out as pads on the underside of the module,
+> beneath the board body, which makes hand soldering impractical. Everything
+> from GPIO15 up is like that.
+>
+> **Decision (option B, chosen by the user):** the encoders move to the
+> **MCP23017 port A** and the 74HC4067 takes over the button lines, using the
+> header pins the encoders freed. Result: **no signal above GPIO14**, with
+> GPIO 11, 12 and 13 still spare. Both ICs are the same as before — no new
+> parts.
+
+- **MCP23017 (I2C)**: carries the 8 **CLK/DT encoder signals** (port A) and,
+  on port B, each **encoder's SW** plus the **4 toggle switches**. The SW
+  lines are here for wiring reasons, not electrical ones: they leave the same
+  KY-040 connector, so they follow their own encoder instead of crossing the
+  enclosure to the mux.
+- **74HC4067 (16-channel mux)**: carries the **11 push buttons**, **Start
+  Engine**, the **2 ignition contacts** and the **parking brake
+  microswitch** — 15 of the 16 channels. All mechanical contacts, which a
+  polled scan serves with room to spare.
+- **Direct ESP32-S3 GPIO**: only what *needs* a pin is left — I2C (8/9), the
+  five mux control lines (4-7 and 10), WS2812 (1), the Start Engine LED (2)
+  and BOOT (0).
+
+### The price of this trade (read before touching the sampling)
+
+Quadrature on GPIO had edge interrupts: **no transition is ever missed**, the
+hardware wakes the MCU on each one. Over I2C there is no such thing —
+transitions only show up if a sample lands between them.
+
+A KY-040 has 20 detents per revolution and 4 Gray transitions per detent. At a
+fast hand spin (~1.5 rev/s = 30 detents/s) a detent lasts ~33 ms and its 4
+transitions sit ~5-10 ms apart. Sampling at **1 ms** catches them all with
+margin. At 5 ms, two neighbouring transitions land in the same sample, the
+quadrature state machine sees a 2-bit jump (impossible on a real contact),
+treats it as noise and **drops the detent** — it never invents an event in the
+wrong direction, but the click simply does not come out.
+
+The main `loop()` ends with `delay(5)`, i.e. it would sample at 200 Hz. That
+is why the MCP23017 read **left the loop** and became a **dedicated task**
+(`lib/inputs/inputs.cpp`, core 0, priority above the loop), with its period in
+`BOARD_MCP_SAMPLE_PERIOD_MS`. A 2-byte read at 400 kHz costs ~150 µs — about
+15% of a bus that has no other device on it.
+
+Once that task is up, **it owns I2C exclusively**: `inputs_update()`, in the
+loop, only reads the cache it maintains. Do not call
+`input_expander_update()` from anywhere else.
+
+The **MCP23017 INT pin is reserved on GPIO14** and is worth wiring now even
+though it is unused: if sampling ever becomes event-driven, it is just
+`GPINTEN` on the chip plus an `attachInterrupt` — no board respin.
+
+- Both expanders keep some headroom (no free MCP pin, 1 free mux channel and
+  3 free header GPIOs) for future expansion.
 
 ---
 
 ## 1. Input table
 
-| INPUT | HARDWARE | PIN | TYPE | NOTE |
+| INPUT | HARDWARE | PIN | TYPE | NOTES |
 |---|---|---|---|---|
-| Encoder 1 — CLK | Direct ESP32-S3 | GPIO4 | Digital, interrupt (edge) | Quadrature; decode CLK+DT together, no software debounce (debounce is inherent to the quadrature state machine). Output mapped as a fixed virtual +/- button — see section 8 |
-| Encoder 1 — DT | Direct ESP32-S3 | GPIO5 | Digital, interrupt (edge) | See CLK note |
-| Encoder 1 — SW | 74HC4067 | C0 | Digital, polling | Encoder click; firmware debounce (~10–20 ms) |
-| Encoder 2 — CLK | Direct ESP32-S3 | GPIO6 | Digital, interrupt (edge) | Quadrature |
-| Encoder 2 — DT | Direct ESP32-S3 | GPIO7 | Digital, interrupt (edge) | Quadrature |
-| Encoder 2 — SW | 74HC4067 | C1 | Digital, polling | Firmware debounce |
-| Encoder 3 — CLK | Direct ESP32-S3 | GPIO10 | Digital, interrupt (edge) | Quadrature |
-| Encoder 3 — DT | Direct ESP32-S3 | GPIO11 | Digital, interrupt (edge) | Quadrature |
-| Encoder 3 — SW | 74HC4067 | C2 | Digital, polling | Firmware debounce |
-| Encoder 4 — CLK | Direct ESP32-S3 | GPIO12 | Digital, interrupt (edge) | Quadrature |
-| Encoder 4 — DT | Direct ESP32-S3 | GPIO13 | Digital, interrupt (edge) | Quadrature |
-| Encoder 4 — SW | 74HC4067 | C3 | Digital, polling | Firmware debounce |
-| Push button 1 | MCP23017 | GPA0 | Digital, interrupt (I2C) | MCP internal pull-up |
-| Push button 2 | MCP23017 | GPA1 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 3 | MCP23017 | GPA2 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 4 | MCP23017 | GPA3 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 5 | MCP23017 | GPA4 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 6 | MCP23017 | GPA5 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 7 | MCP23017 | GPA6 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 8 | MCP23017 | GPA7 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 9 | MCP23017 | GPB0 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 10 | MCP23017 | GPB1 | Digital, interrupt (I2C) | Internal pull-up |
-| Push button 11 | MCP23017 | GPB2 | Digital, interrupt (I2C) | Internal pull-up |
-| Start Engine (push) | MCP23017 | GPB3 | Digital, interrupt (I2C) | Internal pull-up; critical action, low latency via interrupt |
-| Ignition — ON position | MCP23017 | GPB4 | Digital, interrupt (I2C) | Confirmed by the user: scooter-style key, 3 physical positions (1=OFF, 2=ON, 3=IGN/start). ON contact closes at position 2 and **stays closed** at position 3 (doesn't open during cranking) |
-| Ignition — IGN position | MCP23017 | GPB5 | Digital, interrupt (I2C) | **Momentary**: only closes while the key is held at position 3; the key is spring-loaded and returns to position 2 on its own when released — this contact is not bistable, the firmware must treat it as a pulse, not a state |
-| Parking brake microswitch | 74HC4067 | C8 | Digital, polling | State (not a pulse) — down=brake engaged, up=brake released. See mapping logic in section 7 |
-| Toggle switch 1 (ON/OFF) | 74HC4067 | C4 | Digital, polling | State, no urgency |
-| Toggle switch 2 (ON/OFF) | 74HC4067 | C5 | Digital, polling | State, no urgency |
-| Toggle switch 3 (ON/OFF) | 74HC4067 | C6 | Digital, polling | State, no urgency |
-| Toggle switch 4 (ON/OFF) | 74HC4067 | C7 | Digital, polling | State, no urgency |
+| Encoder 1 — CLK | MCP23017 | GPA0 | Digital, sampled at 1 kHz | Quadrature; decode CLK+DT together, no software debounce (debounce is inherent to the quadrature state machine). **Read through the RAW path** of `input_expander`, outside the 15 ms debounce. Output mapped as a fixed virtual +/- button — see section 8 |
+| Encoder 1 — DT | MCP23017 | GPA1 | Digital, sampled at 1 kHz | See CLK note |
+| Encoder 1 — SW | MCP23017 | GPB0 | Digital, polling | Encoder click; firmware debounce (15 ms) |
+| Encoder 2 — CLK | MCP23017 | GPA2 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 2 — DT | MCP23017 | GPA3 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 2 — SW | MCP23017 | GPB1 | Digital, polling | Firmware debounce |
+| Encoder 3 — CLK | MCP23017 | GPA4 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 3 — DT | MCP23017 | GPA5 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 3 — SW | MCP23017 | GPB2 | Digital, polling | Firmware debounce |
+| Encoder 4 — CLK | MCP23017 | GPA6 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 4 — DT | MCP23017 | GPA7 | Digital, sampled at 1 kHz | Quadrature |
+| Encoder 4 — SW | MCP23017 | GPB3 | Digital, polling | Firmware debounce |
+| Push button 1 | 74HC4067 | C0 | Digital, polling | ESP32 internal pull-up on the SIG line |
+| Push button 2 | 74HC4067 | C1 | Digital, polling | idem |
+| Push button 3 | 74HC4067 | C2 | Digital, polling | idem |
+| Push button 4 | 74HC4067 | C3 | Digital, polling | idem |
+| Push button 5 | 74HC4067 | C4 | Digital, polling | idem |
+| Push button 6 | 74HC4067 | C5 | Digital, polling | idem |
+| Push button 7 | 74HC4067 | C6 | Digital, polling | idem |
+| Push button 8 | 74HC4067 | C7 | Digital, polling | idem |
+| Push button 9 | 74HC4067 | C8 | Digital, polling | idem |
+| Push button 10 | 74HC4067 | C9 | Digital, polling | idem |
+| Push button 11 | 74HC4067 | C10 | Digital, polling | idem |
+| Start Engine (push) | 74HC4067 | C11 | Digital, polling | A full 15-channel scan takes ~450 µs, spread over several `mux4067_scan()` calls — imperceptible for a button |
+| Ignition — ON position | 74HC4067 | C12 | Digital, polling | Confirmed with the user: scooter key, 3 physical positions (1=OFF, 2=ON, 3=IGN/crank). The ON contact closes at position 2 and **stays closed** at position 3 (it does not open during cranking) |
+| Ignition — IGN position | 74HC4067 | C13 | Digital, polling | **Momentary**: closed only while the key is held at position 3; the key is spring-returned and falls back to position 2 on release — this contact is not bistable, firmware must treat it as a pulse, not a state |
+| Parking brake microswitch | 74HC4067 | C14 | Digital, polling | State (not pulse) — down=brake engaged, up=brake released. See mapping logic in section 7 |
+| Toggle switch 1 (ON/OFF) | MCP23017 | GPB4 | Digital, polling | State, not urgent |
+| Toggle switch 2 (ON/OFF) | MCP23017 | GPB5 | Digital, polling | State, not urgent |
+| Toggle switch 3 (ON/OFF) | MCP23017 | GPB6 | Digital, polling | State, not urgent |
+| Toggle switch 4 (ON/OFF) | MCP23017 | GPB7 | Digital, polling | State, not urgent |
 
 Total: 31 physical signals (12 from the encoders + 11 push buttons + 1
-microswitch + 2 from the ignition + 1 start + 4 toggle switches).
+microswitch + 2 ignition + 1 start + 4 toggle switches). 16 on the MCP23017
+(full) and 15 on the 74HC4067 (1 channel free).
 
 ---
 
@@ -82,52 +121,48 @@ microswitch + 2 from the ignition + 1 start + 4 toggle switches).
 
 | Pin | Use |
 |---|---|
-| GPA0 | Push button 1 |
-| GPA1 | Push button 2 |
-| GPA2 | Push button 3 |
-| GPA3 | Push button 4 |
-| GPA4 | Push button 5 |
-| GPA5 | Push button 6 |
-| GPA6 | Push button 7 |
-| GPA7 | Push button 8 |
-| GPB0 | Push button 9 |
-| GPB1 | Push button 10 |
-| GPB2 | Push button 11 |
-| GPB3 | Start Engine |
-| GPB4 | Ignition — ON |
-| GPB5 | Ignition — IGN |
-| GPB6 | **Free** (future expansion) |
-| GPB7 | **Free** (future expansion) |
+| GPA0 | Encoder 1 — CLK |
+| GPA1 | Encoder 1 — DT |
+| GPA2 | Encoder 2 — CLK |
+| GPA3 | Encoder 2 — DT |
+| GPA4 | Encoder 3 — CLK |
+| GPA5 | Encoder 3 — DT |
+| GPA6 | Encoder 4 — CLK |
+| GPA7 | Encoder 4 — DT |
+| GPB0 | Encoder 1 — SW |
+| GPB1 | Encoder 2 — SW |
+| GPB2 | Encoder 3 — SW |
+| GPB3 | Encoder 4 — SW |
+| GPB4 | Toggle switch 1 |
+| GPB5 | Toggle switch 2 |
+| GPB6 | Toggle switch 3 |
+| GPB7 | Toggle switch 4 |
 
-Recommended configuration (for when it gets implemented): internal
-pull-ups enabled on all used pins, `GPINTEN` enabled on the 14 used pins,
-`INTCON`/`DEFVAL` for interrupt-on-change (not fixed level), banks A and
-B with mirrored interrupt (`IOCON.MIRROR = 1`) to use a single INT line
-on the ESP32-S3.
+All 16 pins are taken. Future expansion goes through the free C15 mux
+channel, the free GPIO 11/12/13, or a second MCP23017 on the same bus
+(`0x21`, A0 to 3V3) — which costs no new pin at all.
 
-### Ignition key logic (confirmed with the user)
+**Port A is a quadrature path, not a button path.** The firmware reads
+GPA0-GPA7 through the **raw** accessor (`input_expander_get_raw()`), outside
+the layer's 15 ms debounce window — debouncing there would erase exactly the
+transitions that make up a detent. Port B goes through debounce normally.
 
-Scooter-style key, 3 physical positions — **not** an ordinary 3-stable-
-state rotary switch:
+Configuration applied by `mcp23017_init()`: all 16 pins as inputs with the
+internal pull-up (~100 kΩ) enabled, no polarity inversion (`IPOL = 0`, keeping
+open=HIGH), `SEQOP` enabled so GPIOA+GPIOB come back in a single I2C
+transaction, and `IOCON.MIRROR = 1` (INTA/INTB mirrored).
 
-| Physical position | GPB4 (ON) | GPB5 (IGN) | Mechanical behavior |
-|---|---|---|---|
-| 1 — OFF | inactive | inactive | Stable — stays until the user moves it |
-| 2 — ON | **active** | inactive | Stable — stays until the user moves it |
-| 3 — IGN/start | **active** | **active** | **Momentary** — spring return; releases on its own and the key returns to position 2 as soon as the user lets go |
+`MIRROR` is already on, but **INT is not used** today: sampling is periodic
+(dedicated task, see "The price of this trade" at the top). To move to
+event-driven reads later, what is missing is enabling `GPINTEN` on the desired
+pins with `INTCON = 0` (interrupt-on-change, not compare-against-`DEFVAL`) plus
+an `attachInterrupt` on GPIO14 — no hardware change, provided INT is already
+wired.
 
-Consequences for the firmware (not implemented yet, only recorded here
-for when the logic gets ported):
-- GPB5 (IGN) must be treated as a **start pulse**, not a state — it never
-  stays "latched" active on its own, always returns to 0 once the user's
-  hand leaves the key.
-- If the user moves the key directly from position 3 to position 1
-  (skipping position 2), the firmware sees GPB4 and GPB5 drop practically
-  together — the vehicle should be treated as OFF in that case, exactly
-  as if it had passed through ON first.
-- There's no valid combination of "IGN active with ON inactive" on this
-  key — if that's ever read, it's a transient electrical transition
-  (debounce), not a real state to report.
+> Careful if you do: if a change happens between the GPIO read and the re-arm,
+> INT can latch active and no new edge ever arrives. Whoever implements it must
+> keep a safety poll in parallel. That race is precisely why periodic sampling
+> was chosen first.
 
 I2C address: 7 bits, `0x20`–`0x27` depending on the chip's A0/A1/A2
 address pins (wire according to the board; with a single MCP, just tie
@@ -139,21 +174,21 @@ A0/A1/A2 to GND → address `0x20`).
 
 | Channel | Use |
 |---|---|
-| C0 | Encoder 1 — SW |
-| C1 | Encoder 2 — SW |
-| C2 | Encoder 3 — SW |
-| C3 | Encoder 4 — SW |
-| C4 | Toggle switch 1 |
-| C5 | Toggle switch 2 |
-| C6 | Toggle switch 3 |
-| C7 | Toggle switch 4 |
-| C8 | Parking brake microswitch |
-| C9 | **Free** (future expansion) |
-| C10 | **Free** (future expansion) |
-| C11 | **Free** (future expansion) |
-| C12 | **Free** (future expansion) |
-| C13 | **Free** (future expansion) |
-| C14 | **Free** (future expansion) |
+| C0 | Push button 1 |
+| C1 | Push button 2 |
+| C2 | Push button 3 |
+| C3 | Push button 4 |
+| C4 | Push button 5 |
+| C5 | Push button 6 |
+| C6 | Push button 7 |
+| C7 | Push button 8 |
+| C8 | Push button 9 |
+| C9 | Push button 10 |
+| C10 | Push button 11 |
+| C11 | Start Engine |
+| C12 | Ignition — ON |
+| C13 | Ignition — IGN |
+| C14 | Parking brake microswitch |
 | C15 | **Free** (future expansion) |
 
 Control lines (not input channels, counted separately in the ESP32-S3 GPIO
@@ -174,78 +209,82 @@ optional recommendation are in section 11.
 
 ---
 
+### Ignition key logic (confirmed with the user)
+
+Scooter-style key, 3 physical positions — **not** an ordinary 3-stable-
+state rotary switch:
+
+| Physical position | C12 (ON) | C13 (IGN) | Mechanical behavior |
+|---|---|---|---|
+| 1 — OFF | inactive | inactive | Stable — stays until the user moves it |
+| 2 — ON | **active** | inactive | Stable — stays until the user moves it |
+| 3 — IGN/start | **active** | **active** | **Momentary** — spring return; releases on its own and the key returns to position 2 as soon as the user lets go |
+
+Consequences for the firmware (not implemented yet, only recorded here
+for when the logic gets ported):
+- C13 (IGN) must be treated as a **start pulse**, not a state — it never
+  stays "latched" active on its own, always returns to 0 once the user's
+  hand leaves the key.
+- If the user moves the key directly from position 3 to position 1
+  (skipping position 2), the firmware sees C12 and C13 drop practically
+  together — the vehicle should be treated as OFF in that case, exactly
+  as if it had passed through ON first.
+- There's no valid combination of "IGN active with ON inactive" on this
+  key — if that's ever read, it's a transient electrical transition
+  (debounce), not a real state to report.
+
+---
+
 ## 4. Direct ESP32-S3 GPIOs used
 
 | GPIO | Function |
 |---|---|
-| GPIO4 | Encoder 1 — CLK |
-| GPIO5 | Encoder 1 — DT |
-| GPIO6 | Encoder 2 — CLK |
-| GPIO7 | Encoder 2 — DT |
-| GPIO8 | I2C SDA (for the MCP23017) — Arduino-ESP32 core default pin (`pins_arduino.h`) |
-| GPIO9 | I2C SCL (for the MCP23017) — core default pin |
-| GPIO10 | Encoder 3 — CLK |
-| GPIO11 | Encoder 3 — DT |
-| GPIO12 | Encoder 4 — CLK |
-| GPIO13 | Encoder 4 — DT |
-| GPIO14 | MCP23017 — INT (mirrored A+B interrupt) |
-| GPIO15 | 74HC4067 — S0 |
-| GPIO16 | 74HC4067 — S1 |
-| GPIO17 | 74HC4067 — S2 |
-| GPIO18 | 74HC4067 — S3 |
-| GPIO21 | 74HC4067 — SIG |
+| GPIO0 | Board BOOT button — only the "hold 5 s to open the WiFi portal" gesture. Does not feed HID |
+| GPIO1 | WS2812 — chain data (8x8 matrix + strip), see `docs/SYSTEM_INTEGRATION.md` |
+| GPIO2 | Start Engine button LED (output, through 220 Ω) — reserved, firmware does not drive it yet |
+| GPIO4 | 74HC4067 — S0 |
+| GPIO5 | 74HC4067 — S1 |
+| GPIO6 | 74HC4067 — S2 |
+| GPIO7 | 74HC4067 — S3 |
+| GPIO8 | I2C SDA (MCP23017) — Arduino-ESP32 core default (`pins_arduino.h`) |
+| GPIO9 | I2C SCL (MCP23017) — core default |
+| GPIO10 | 74HC4067 — SIG |
+| GPIO14 | MCP23017 — INT (A+B mirrored). **Reserved, unused** by the current firmware (sampling is periodic); wire it anyway |
 
-16 GPIOs used. All within the GPIO0–21 range, which is universally
-exposed on any ESP32-S3 board variant (including Super Mini/S3 Zero) —
-none of them depend on pins whose availability varies by manufacturer.
+11 GPIOs used, **all within GPIO0-14** — exactly the range the ESP32-S3
+SuperMini exposes on headers. No underside pad is required.
 
-Pins deliberately **avoided** in this allocation (don't use for inputs
-without a strong reason):
-- **GPIO0** — already the board's physical BOOT button, already mapped as
-  HID Button 1 in the current firmware (`docs/ARCHITECTURE.md` item 8).
-  Strapping pin.
-- **GPIO3, GPIO45, GPIO46** — ESP32-S3 strapping pins (affect boot mode/
-  flash voltage); GPIO46 is also *input-only*. Usable only with extra
-  care, not recommended for the first hardware revision.
-- **GPIO19, GPIO20** — native USB (D-/D+), in use by HID/CDC. Never use
-  as GPIO in this project.
-- **GPIO26–GPIO32** — internal bus for the in-package flash/PSRAM
-  (SPI0/1). Don't exist as usable GPIO on this board.
-- **GPIO43, GPIO44** — UART0 TX/RX (default). Free in the current setup
-  (the project uses native USB CDC, not UART0), but reserved for
-  alternative serial debugging if ever needed.
-- **GPIO48** — already the board's built-in RGB LED (NeoPixel)
-  (`PIN_NEOPIXEL` in the core). Reusable if we give up the status LED,
-  not recommended right now.
+Pins deliberately **avoided** in this allocation:
+- **GPIO3, GPIO45, GPIO46** — ESP32-S3 strapping pins (affect boot mode / flash
+  voltage); GPIO46 is also *input-only*.
+- **GPIO19, GPIO20** — native USB (D-/D+), in use by HID/CDC. Never use as GPIO
+  in this project.
+- **GPIO15-18, GPIO21 and everything from GPIO33 up** — they exist on the chip,
+  but on the SuperMini they come out as underside pads. This is the constraint
+  that drove this revision; do not go back to them without changing boards.
+- **GPIO26-GPIO32** — internal bus to the in-package flash/PSRAM (SPI0/1). Not
+  usable as GPIO on this board.
+- **GPIO43, GPIO44** — UART0 TX/RX (default). Free in current use (the project
+  uses native USB CDC, not UART0), but reserved for alternative serial
+  debugging if ever needed.
+- **GPIO48** — the board's built-in RGB LED (`PIN_NEOPIXEL` in the core).
 
 ---
 
 ## 5. GPIOs still free
 
-| GPIO | Note |
+| GPIO | Notes |
 |---|---|
-| GPIO1 | **Used** — WS2812 data output (8x8 matrix + strip), see `docs/SYSTEM_INTEGRATION.en.md`. No longer an input, it's the project's only addressable data output |
-| GPIO33 | Free — confirm it's physically exposed on the specific module (only reserved for PSRAM/flash in Octal mode; this board uses Quad, `qspi_2m`, so the pin is available at the chip level) |
-| GPIO34 | Free — same note as GPIO33 |
-| GPIO35 | Free — same note |
-| GPIO36 | Free — same note |
-| GPIO37 | Free — same note |
-| GPIO38 | Free |
-| GPIO39 | Free |
-| GPIO40 | Free |
-| GPIO41 | Free |
-| GPIO42 | Free |
-| GPIO43 | Free (UART0 TX, see note above) |
-| GPIO44 | Free (UART0 RX, see note above) |
-| GPIO45 | Free with caution (strapping — avoid unless there's a reason) |
-| GPIO46 | Free with caution (strapping, input-only) |
-| GPIO47 | Free |
-| GPIO48 | Free with caution (built-in RGB LED) |
+| GPIO11 | **Free on header** — first candidate for any new input/output |
+| GPIO12 | **Free on header** |
+| GPIO13 | **Free on header** |
+| GPIO3 | Present on header, but it is a strapping pin — avoid without a reason |
+| GPIO15-18, 21, 33-48 | Present on the chip; on the SuperMini they are underside pads. Treat as unavailable |
 
-This leaves comfortable headroom for future expansion (paddle shifters,
-analog handbrake, clutch/pedal potentiometers, etc.) without needing to
-redesign this allocation — including the MCP23017's 2 free channels and
-the 74HC4067's 7 free channels, before even touching extra GPIO.
+Three free header pins, plus mux channel C15, plus the option of a second
+MCP23017 on the same I2C (16 inputs at zero pin cost). That comfortably covers
+paddle shifters, an analog handbrake or a pedal set — bearing in mind that on
+the HID side the bit budget is the real limit (section 9).
 
 ---
 
@@ -271,7 +310,7 @@ Wiring:
 | Button terminal | Goes to | Note |
 |---|---|---|
 | COM (common, switch+LED) | GND | A single GND wire serves both circuits |
-| Switch (NO) | MCP23017 GPB3 | Already allocated in section 1/2 — MCP internal pull-up, reads LOW when pressed |
+| Switch (NO) | 74HC4067 C11 | Already allocated in sections 1/3 — ESP32 internal pull-up on the SIG line, reads LOW when pressed |
 | LED (anode, +) | ESP32-S3 **GPIO2**, through a **220 Ω** resistor (or 150 Ω for more brightness) | Dedicated digital output — lets the firmware decide when to light it up (always on, only with ignition in ON/IGN, blinking during cranking, etc.) instead of wiring it straight to a power rail |
 
 Resistor calculated for the ESP32-S3 GPIO's 3.3V (don't use the 5V rail
@@ -477,123 +516,130 @@ internal pull-ups.
 
 ### Power and control connections (what usually makes "nothing work")
 
-| Chip | Pin | Connect to | Note |
+| Chip | Pin | Goes to | Notes |
 |---|---|---|---|
 | ESP32-S3 | 3V3 / GND | 3.3 V rail / common GND | everything referenced to the same GND |
 | MCP23017 | VDD / VSS | 3.3 V / GND | |
-| MCP23017 | **RESET** | **3.3 V** | don't leave it floating — the chip can get stuck in reset. Some breakout boards already handle this; check yours |
+| MCP23017 | **RESET** | **3.3 V** | do not leave floating — the chip can sit stuck in reset. Some breakouts already handle this; check yours |
 | MCP23017 | A0, A1, A2 | **GND** | I2C address `0x20` (what `board_config.h` expects) |
-| MCP23017 | SDA / SCL | GPIO8 / GPIO9 | need I2C pull-ups (~4.7 kΩ → 3.3 V). Breakouts usually include them; a bare chip doesn't |
-| MCP23017 | INTA / INTB | leave unconnected | the firmware polls; it doesn't use the chip's interrupt |
+| MCP23017 | SDA / SCL | GPIO8 / GPIO9 | need I2C pull-ups (~4.7 kΩ → 3.3 V). Breakouts usually have them; a bare chip does not. **With quadrature now riding on I2C, a marginal bus stops being "a button glitches sometimes" and becomes a dropped detent** — if in doubt, fit the 4.7 kΩ |
+| MCP23017 | INT (or INTA) | GPIO14 | **reserved**: the current firmware does not use it. Wire it anyway — it is free and saves a board respin if sampling becomes event-driven |
+| MCP23017 | INTB | leave unconnected | `IOCON.MIRROR = 1` mirrors both ports onto one line |
 | 74HC4067 | VCC / GND | 3.3 V / GND | |
-| 74HC4067 | **EN (/E)** | **GND** | active low: `HIGH` (or floating) turns every channel off. Some boards already ground it; check yours |
-| 74HC4067 | S0–S3 / SIG | GPIO15–18 / GPIO21 | per `include/board_config.h` |
-| KY-040 | `+` | **3.3 V (not 5 V)** | the module's pull-ups go to this pin; at 5 V it would inject 5 V into the ESP32 inputs |
+| 74HC4067 | **EN (/E)** | **GND** | active low: at `HIGH` (or floating) it disables every channel. Some boards already ground it; check yours |
+| 74HC4067 | S0 / S1 / S2 / S3 | GPIO4 / GPIO5 / GPIO6 / GPIO7 | per `include/board_config.h` |
+| 74HC4067 | SIG | GPIO10 | idem |
+| KY-040 | `+` | **3.3 V (not 5 V)** | the module's pull-up hangs off this pin; at 5 V it would inject 5 V into the MCP23017 inputs |
 
-### Push buttons 1–11, Start Engine, Ignition (MCP23017)
+> **Wire length matters more than before.** The 8 CLK/DT lines now land on the
+> MCP23017, and SDA/SCL carries the quadrature. Keep the MCP23017 close to the
+> ESP32 (short I2C) and run the long wires to the encoders, not to the bus.
 
-The MCP23017 has an **internal pull-up** (~100 kΩ, enabled via `GPPU`). No
-external resistor.
+### Push buttons 1–11, Start Engine, Ignition, parking brake (74HC4067)
 
-```
-Button/switch terminal 1 ──→  MCP23017 pin (GPA0–GPB5)
-Terminal 2               ──→  GND
-```
-
-Logic: pin reads `HIGH` at rest → `LOW` when pressed.
-
-### Toggle switches (C4–C7) and parking brake (C8) — 74HC4067
-
-Bare switches (just two terminals). The ESP32's internal pull-up on the SIG
-line already handles it — **no per-input resistor**.
+Bare switches (two terminals). The firmware enables the ESP32 internal pull-up
+on the SIG line (`pinMode(SIG, INPUT_PULLUP)`), and the mux connects the
+selected channel to SIG — **that single pull-up serves every channel**. No
+per-input resistor.
 
 ```
 74HC4067 channel Cx ──→  Switch terminal 1
                          Switch terminal 2 ──→  GND
 ```
 
-**Optional, only if `mux-test` shows unstable readings** (most likely with
-long wires): add **a single** 10 kΩ resistor between the **SIG line
-(GPIO21)** and 3.3 V. Since SIG is common to all channels, that one
-resistor serves all nine at once. *This is an expectation from the
-circuit's physics; it hasn't been measured on assembled hardware yet —
-test without it first and only add it if needed.*
+| Channel | What to wire |
+|---|---|
+| C0–C10 | Push buttons 1 to 11 |
+| C11 | Start Engine (switch NO terminal; COM goes to GND) |
+| C12 | Ignition — ON contact |
+| C13 | Ignition — IGN contact (crank) |
+| C14 | Parking brake microswitch |
+| C15 | free |
+
+Logic: the channel reads `HIGH` at rest → `LOW` when closed to GND.
+
+**Optional, only if `mux-test` shows unstable readings** (more likely with long
+wires): **a single** 10 kΩ resistor between the **SIG line (GPIO10)** and
+3.3 V. Since SIG is common to every channel, that one resistor serves all
+fifteen. *This is an expectation from circuit physics; it has not been measured
+on assembled hardware — test without it, and only add it if you need it.*
 
 **Parking brake:** the firmware treats "contact closed to GND" as engaged.
 Which lever position closes the contact depends on whether you use the
-microswitch's NO or NC terminal; if it comes out inverted, swap terminals.
+microswitch NO or NC terminal; if it ends up inverted, swap the terminal.
 
-### Encoder SW clicks (C0–C3) — KY-040 → 74HC4067
-
-SW is **not** a bare switch: it's the module's `SW` pin, and the standard
-KY-040 already has a 10 kΩ pull-up on its PCB on CLK, DT **and** SW. So
-there's nothing to solder:
-
-```
-KY-040  SW  ──→  74HC4067 channel C0–C3
-        GND ──→  GND
-        +   ──→  3.3 V
-```
-
-Check on your module with a multimeter (measuring between `SW` and `+`
-should read ~10 kΩ); some clones lack the SW pull-up — in that case the
-SIG line's internal pull-up covers it.
-
-### KY-040 encoder CLK / DT (direct ESP32-S3 GPIO)
-
-The module already has pull-ups on its own PCB (and the firmware enables the
-internal ones too, which is harmless).
-
-```
-KY-040  CLK  ──→  GPIO4 / 6 / 10 / 12   (encoders 1–4)
-        DT   ──→  GPIO5 / 7 / 11 / 13
-        GND  ──→  GND
-        +    ──→  3.3 V
-```
-
-### Ignition (3 positions, scooter key switch)
+### Ignition (3 positions, scooter key switch) — 74HC4067
 
 ```
 COM (common)            ──→  GND
-ON contact              ──→  MCP23017 GPB4
-IGN (start) contact     ──→  MCP23017 GPB5
+ON contact              ──→  74HC4067 C12
+IGN contact (crank)     ──→  74HC4067 C13
 ```
 
-Before wiring, confirm with a multimeter that the ON contact stays closed
-in position 3 (start) — see section 2.
+Before wiring, confirm with a multimeter that the ON contact stays closed at
+position 3 (crank) — see section 3.
 
 ### Start Engine button (3 terminals) and its LED
 
 ```
-COM            ──→  GND               (serves both the switch AND the LED)
-Switch (NO)    ──→  MCP23017 GPB3
+COM            ──→  GND               (serves both the switch and the LED)
+Switch (NO)    ──→  74HC4067 C11
 LED anode (+)  ──→  220 Ω ──→  ESP32-S3 GPIO2
 ```
 
-Resistor for 3.3 V: `R = (3.3 V − Vf) / I` with `Vf ≈ 2.0 V` (red LED)
-and `I ≈ 6–9 mA` → 220–150 Ω. Minimum recommended: 100 Ω.
+Resistor for 3.3 V: `R = (3.3 V − Vf) / I` with `Vf ≈ 2.0 V` (red LED) and
+`I ≈ 6–9 mA` → 220–150 Ω. Recommended minimum: 100 Ω.
 
-> **Note:** the firmware **does not drive GPIO2 yet**. Wired like this, the
-> LED won't light by itself — the logic (e.g. light it when the ignition is
-> ON) hasn't been implemented.
+> **Note:** the firmware **does not drive GPIO2 yet**. Wired like this the LED
+> will not light on its own — the logic (e.g. light it with ignition ON) is
+> still unimplemented.
+
+### KY-040 encoders — CLK, DT and SW, all on the MCP23017
+
+The MCP23017 has an internal pull-up (~100 kΩ) on all 16 pins, and the KY-040
+module already carries its own on the PCB. No resistor to solder.
+
+```
+KY-040 #1   CLK ──→ GPA0    DT ──→ GPA1    SW ──→ GPB0
+KY-040 #2   CLK ──→ GPA2    DT ──→ GPA3    SW ──→ GPB1
+KY-040 #3   CLK ──→ GPA4    DT ──→ GPA5    SW ──→ GPB2
+KY-040 #4   CLK ──→ GPA6    DT ──→ GPA7    SW ──→ GPB3
+all         GND ──→ GND     +  ──→ 3.3 V
+```
+
+Check your module with a multimeter (between `SW` and `+` should read ~10 kΩ);
+some clones lack the `SW` pull-up — the MCP23017 internal one covers that case.
+
+> **If one physical detent does not produce exactly one event**, suspect number
+> one is now the sampling period (`BOARD_MCP_SAMPLE_PERIOD_MS`) or a marginal
+> I2C bus — not the decoder. Run the isolated `encoder-test` before touching the
+> quadrature state machine, which did not change at all in this revision.
+
+### Toggle switches 1–4 — MCP23017
+
+```
+Toggle switch 1 ──→ GPB4      Toggle switch 3 ──→ GPB6
+Toggle switch 2 ──→ GPB5      Toggle switch 4 ──→ GPB7
+the other terminal of each ──→ GND
+```
 
 ### WS2812 matrix + strip
 
-**External 5 V** power straight into the matrix/strip (~4.4 A peak with 74
-LEDs at full white — the ESP32's USB can't supply that), **common GND** with
-the ESP32, data `GPIO1 → matrix DIN → matrix DOUT → strip DIN`.
-Recommended: a ~1000 µF capacitor across +5 V/GND near the first LED and a
-~330–470 Ω resistor in series on the data wire.
+**External 5 V** supply straight to the matrix/strip (~4.4 A peak with 74 LEDs
+at full white — the ESP32 USB rail cannot take it), **common GND** with the
+ESP32, data `GPIO1 → matrix DIN → matrix DOUT → strip DIN`. Recommended: a
+~1000 µF capacitor between +5 V and GND near the first LED and a ~330–470 Ω
+series resistor on the data wire.
 
 ### Quick-reference table
 
 | Component | Terminal 1 goes to | Terminal 2 goes to | Pull-up |
 |---|---|---|---|
-| Push buttons 1–11 | MCP23017 pin (GPA0–GPA7, GPB0–GPB2) | **GND** | MCP internal (~100 kΩ) |
-| Start Engine (switch) | MCP23017 GPB3 | **GND** (via COM) | MCP internal |
-| Ignition — ON / IGN | MCP23017 GPB4 / GPB5 | **GND** (via COM) | MCP internal |
-| Encoder SW clicks | 74HC4067 channel C0–C3 | KY-040 module (GND/`+`) | On the KY-040 PCB |
-| Toggle switches 1–4 | 74HC4067 channel C4–C7 | **GND** | ESP32 internal, on the SIG line |
-| Parking brake | 74HC4067 channel C8 | **GND** | ESP32 internal, on the SIG line |
-| KY-040 CLK/DT | Direct ESP32 GPIO | — | On the KY-040 PCB |
-| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — (n/a; GPIO2 isn't driven yet) |
+| Push buttons 1–11 | 74HC4067 C0–C10 | **GND** | ESP32 internal, on the SIG line |
+| Start Engine (switch) | 74HC4067 C11 | **GND** (via COM) | ESP32 internal, on the SIG line |
+| Ignition — ON / IGN | 74HC4067 C12 / C13 | **GND** (via COM) | ESP32 internal, on the SIG line |
+| Parking brake | 74HC4067 C14 | **GND** | ESP32 internal, on the SIG line |
+| KY-040 CLK / DT | MCP23017 GPA0–GPA7 | KY-040 module (GND / `+`) | KY-040 PCB + MCP internal |
+| Encoder SW | MCP23017 GPB0–GPB3 | KY-040 module (GND / `+`) | KY-040 PCB + MCP internal |
+| Toggle switches 1–4 | MCP23017 GPB4–GPB7 | **GND** | MCP internal (~100 kΩ) |
+| Start Engine (LED) | GPIO2 through 220 Ω | **GND** (via COM) | — (n/a; GPIO2 is not driven yet) |

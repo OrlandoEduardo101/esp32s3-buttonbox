@@ -54,6 +54,22 @@ void input_expander_update();
 // Não faz I2C, não bloqueia — é só leitura de uma variável em RAM.
 uint16_t input_expander_get_state();
 
+// Última leitura CRUA do MCP23017 (a que input_expander_update() acabou de
+// fazer), SEM debounce e na convenção ELÉTRICA DO CHIP: bit=1 -> pino em
+// HIGH -> switch aberto. Note que é a convenção OPOSTA à de
+// input_expander_get_state(), de propósito: quem pede o cru quer o sinal
+// como ele é, não a interpretação "pressionado".
+//
+// Existe para UM caso: sinais em que o debounce por tempo desta camada
+// seria destrutivo em vez de útil — concretamente, as linhas CLK/DT de
+// quadratura dos encoders (banco A, ver include/board_config.h). Uma janela
+// de 15 ms apagaria justamente as transições que formam o detent. Para
+// botões e chaves continue usando get_state()/get_bit(), que são debounced.
+//
+// Não faz I2C: só devolve o valor que ficou da última
+// input_expander_update().
+uint16_t input_expander_get_raw();
+
 // Conveniência: estado de uma única entrada (0-15), já debounced.
 // index fora de 0-15 devolve false.
 bool input_expander_get_bit(uint8_t index);

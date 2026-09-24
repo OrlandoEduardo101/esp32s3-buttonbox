@@ -184,13 +184,13 @@ modificar código").
 
 | Teste | Critério de sucesso | Se falhar, isolar com |
 |---|---|---|
-| Cada push button (11) individualmente | Bit correspondente no `joy.cpl` acende/apaga exatamente ao apertar/soltar | `mcp-test` (lê direto do MCP23017, sem passar por `inputs`/HID) |
-| SW dos 4 encoders | Idem, 4 botões (12-15) | `mux-test` (74HC4067 direto) |
-| 4 encoders — CW/CCW | Cada detent físico gera exatamente 1 evento no sentido certo | `encoder-test` (decoder de quadratura isolado) |
-| Freio de estacionamento | Estado acompanha a posição da alavanca | `mux-test` (canal C8) |
-| Ignição (3 posições) | ON e IGN corretos, IGN só durante o crank (ver `docs/INPUTS_PINOUT.md` seção 2) | `mcp-test` (GPB4/GPB5) |
-| Start Engine | Botão + LED (se já ligado) | `mcp-test` (GPB3) para o botão; LED é fiação separada, sem firmware |
-| 4 chaves caça | Estado acompanha a posição da chave | `mux-test` (canais C4-C7) |
+| Cada push button (11) individualmente | Bit correspondente no `joy.cpl` acende/apaga exatamente ao apertar/soltar | `mux-test` (canais C0-C10, direto do 74HC4067, sem passar por `inputs`/HID) |
+| SW dos 4 encoders | Idem, 4 botões (12-15) | `mcp-test` (GPB0-GPB3, MCP23017 direto) |
+| 4 encoders — CW/CCW | Cada detent físico gera exatamente 1 evento no sentido certo | `encoder-test` (quadratura isolada, lendo GPA0-GPA7 do MCP23017). Detent faltando aponta para o período de amostragem / I2C, não para o decoder — ver `docs/INPUTS_PINOUT.md` seção "O preço dessa troca" |
+| Freio de estacionamento | Estado acompanha a posição da alavanca | `mux-test` (canal C14) |
+| Ignição (3 posições) | ON e IGN corretos, IGN só durante o crank (ver `docs/INPUTS_PINOUT.md` seção 3) | `mux-test` (canais C12/C13) |
+| Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; LED é fiação separada, sem firmware |
+| 4 chaves caça | Estado acompanha a posição da chave | `mcp-test` (GPB4-GPB7) |
 | Múltiplos botões simultâneos | Sem interferência entre bits (não deveria haver — não há matriz) | `inputs-test` (várias entradas ao mesmo tempo, ver o log) |
 | HID no Windows | `joy.cpl` mostra os 31 controles reais + heartbeat no bit 32 | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respondem | Qualquer terminal serial na porta COM |

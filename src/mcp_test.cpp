@@ -13,27 +13,33 @@
 //   GPA0-7 / GPB0-7 -> switches para GND, pull-up interno do MCP23017
 #include <Arduino.h>
 #include "input_expander.h"
+#include "board_config.h" // endereco/pinos do I2C — mapa unico do projeto
 
 // Rótulos na mesma ordem dos bits de input_expander_get_state():
 // bit 0-7 = GPA0-GPA7, bit 8-15 = GPB0-GPB7 (docs/INPUTS_PINOUT.md secao 2).
 static const char *const PIN_LABEL[16] = {
-  "GPA0 Push button 1",
-  "GPA1 Push button 2",
-  "GPA2 Push button 3",
-  "GPA3 Push button 4",
-  "GPA4 Push button 5",
-  "GPA5 Push button 6",
-  "GPA6 Push button 7",
-  "GPA7 Push button 8",
-  "GPB0 Push button 9",
-  "GPB1 Push button 10",
-  "GPB2 Push button 11",
-  "GPB3 Start Engine",
-  "GPB4 Ignicao ON",
-  "GPB5 Ignicao IGN",
-  "GPB6 livre",
-  "GPB7 livre",
+  "GPA0 Encoder 1 CLK",
+  "GPA1 Encoder 1 DT",
+  "GPA2 Encoder 2 CLK",
+  "GPA3 Encoder 2 DT",
+  "GPA4 Encoder 3 CLK",
+  "GPA5 Encoder 3 DT",
+  "GPA6 Encoder 4 CLK",
+  "GPA7 Encoder 4 DT",
+  "GPB0 Encoder 1 SW",
+  "GPB1 Encoder 2 SW",
+  "GPB2 Encoder 3 SW",
+  "GPB3 Encoder 4 SW",
+  "GPB4 Chave caca 1",
+  "GPB5 Chave caca 2",
+  "GPB6 Chave caca 3",
+  "GPB7 Chave caca 4",
 };
+
+// NOTA: o banco A (GPA0-GPA7) e' quadratura, nao botao. Girar um encoder
+// aqui faz os dois bits dele oscilarem varias vezes por detent — e' o
+// comportamento CERTO. Este teste so prova continuidade eletrica do banco A;
+// quem valida a decodificacao (1 detent = 1 evento) e' o `encoder-test`.
 
 static uint16_t lastPrinted = 0x0000;
 
@@ -61,7 +67,7 @@ void setup() {
   delay(300);
   Serial.println("\n=== Teste isolado MCP23017 / input_expander ===");
 
-  if (!input_expander_init()) {
+  if (!input_expander_init(BOARD_MCP23017_ADDR, BOARD_I2C_SDA_PIN, BOARD_I2C_SCL_PIN)) {
     Serial.println("[MCP23017] AVISO: chip nao respondeu no I2C "
                     "(endereco 0x20, SDA=8, SCL=9). Verifique a fiacao.");
   } else {

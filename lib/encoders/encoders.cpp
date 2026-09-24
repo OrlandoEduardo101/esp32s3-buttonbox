@@ -26,6 +26,12 @@ struct EncoderRuntime {
   // Escrito só por encoder_update():
   uint8_t tail;
 
+  // Tocado só pelo PRODUTOR (encoder_feed, no modo externo) — guarda a
+  // última amostra já enfileirada, para descartar repetições. 0xFF = ainda
+  // não há amostra anterior. Não usado no modo GPIO/ISR, onde cada borda
+  // já é, por definição, uma mudança.
+  uint8_t lastFed;
+
   // Tocados só por encoder_update() (nunca pela ISR) — sem risco de
   // corrida com a interrupção.
   QuadState state;
@@ -108,6 +114,17 @@ QuadState stepQuadrature(QuadState state, uint8_t pins, EncoderEvent *event) {
   return QuadState::Rest;
 }
 
+// Zera todo o estado de um encoder. Comum aos dois modos de init.
+void resetRuntime(EncoderRuntime &enc) {
+  enc.head = 0;
+  enc.tail = 0;
+  enc.lastFed = 0xFF;
+  enc.state = QuadState::Rest;
+  enc.position = 0;
+  enc.pendingCW = 0;
+  enc.pendingCCW = 0;
+}
+
 } // namespace
 
 void encoder_init(const uint8_t clkPins[ENCODER_COUNT], const uint8_t dtPins[ENCODER_COUNT]) {
@@ -115,12 +132,7 @@ void encoder_init(const uint8_t clkPins[ENCODER_COUNT], const uint8_t dtPins[ENC
     EncoderRuntime &enc = g_enc[i];
     enc.clkPin = clkPins[i];
     enc.dtPin  = dtPins[i];
-    enc.head = 0;
-    enc.tail = 0;
-    enc.state = QuadState::Rest;
-    enc.position = 0;
-    enc.pendingCW = 0;
-    enc.pendingCCW = 0;
+    resetRuntime(enc);
 
     // Pull-up interno como rede de seguranca; o modulo KY-040 ja traz o
     // seu proprio pull-up de fabrica.
@@ -130,6 +142,40 @@ void encoder_init(const uint8_t clkPins[ENCODER_COUNT], const uint8_t dtPins[ENC
     attachInterruptArg(enc.clkPin, encoderIsr, (void *)(uintptr_t)i, CHANGE);
     attachInterruptArg(enc.dtPin,  encoderIsr, (void *)(uintptr_t)i, CHANGE);
   }
+}
+
+void encoder_init_external() {
+  for (uint8_t i = 0; i < ENCODER_COUNT; i++) {
+    EncoderRuntime &enc = g_enc[i];
+    // 0xFF = "sem pino" — deixa explícito que neste modo o driver nunca
+    // faz digitalRead(); quem lê o hardware é quem chama encoder_feed().
+    enc.clkPin = 0xFF;
+    enc.dtPin  = 0xFF;
+    resetRuntime(enc);
+  }
+}
+
+void encoder_feed(uint8_t index, uint8_t clkLevel, uint8_t dtLevel) {
+  if (index >= ENCODER_COUNT) return;
+  EncoderRuntime &enc = g_enc[index];
+
+  const uint8_t pins = (uint8_t)(((clkLevel ? 1 : 0) << 1) | (dtLevel ? 1 : 0));
+
+  // Filtro de repetição: sem isso, uma varredura de 1 kHz encheria o ring
+  // de 32 posições com amostras idênticas em 32 ms de placa parada, e a
+  // primeira transição de verdade seria descartada por buffer cheio.
+  if (pins == enc.lastFed) return;
+  enc.lastFed = pins;
+
+  const uint8_t head = enc.head;
+  const uint8_t next = (uint8_t)((head + 1) & RING_MASK);
+  if (next != enc.tail) {
+    enc.ring[head] = pins;
+    enc.head = next;
+  }
+  // Buffer cheio: mesma decisão do modo ISR — descarta a amostra em vez de
+  // bloquear o produtor. Só aconteceria com encoder_update() sem ser
+  // chamada por muito tempo (>32 transições de atraso).
 }
 
 void encoder_update() {

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "input_expander.h" // MCP23017 (lib/input_expander) — nao alterado
 #include "mux4067.h"         // 74HC4067 (lib/mux4067) — nao alterado
-#include "encoders.h"        // KY-040 (lib/encoders) — nao alterado
+#include "encoders.h"        // KY-040 (lib/encoders), usado em MODO EXTERNO
 #include "board_config.h"    // mapa unico de pinos/canais deste projeto (include/)
 
 namespace {
@@ -25,25 +25,27 @@ struct InputBinding {
 // Ordem TEM que bater exatamente com o enum InputId em inputs.h — o
 // static_assert logo abaixo garante isso em tempo de compilacao.
 constexpr InputBinding BINDINGS[INPUT_ID_COUNT] = {
-  // INPUT_BUTTON_01-08 -> MCP23017 GPA0-GPA7 (bits 0-7)
-  {SourceKind::Mcp23017, 0}, {SourceKind::Mcp23017, 1}, {SourceKind::Mcp23017, 2},
-  {SourceKind::Mcp23017, 3}, {SourceKind::Mcp23017, 4}, {SourceKind::Mcp23017, 5},
-  {SourceKind::Mcp23017, 6}, {SourceKind::Mcp23017, 7},
-  // INPUT_BUTTON_09-11 -> MCP23017 GPB0-GPB2 (bits 8-10)
-  {SourceKind::Mcp23017, 8}, {SourceKind::Mcp23017, 9}, {SourceKind::Mcp23017, 10},
-  // INPUT_BUTTON_12-15 -> 74HC4067 C0-C3 (SW dos 4 encoders)
-  {SourceKind::Mux4067, 0}, {SourceKind::Mux4067, 1},
-  {SourceKind::Mux4067, 2}, {SourceKind::Mux4067, 3},
-  // INPUT_IGNITION_ON/IGN -> MCP23017 GPB4/GPB5 (bits 12/13)
+  // INPUT_BUTTON_01-11 -> 74HC4067 C0-C10
+  {SourceKind::Mux4067, 0}, {SourceKind::Mux4067, 1}, {SourceKind::Mux4067, 2},
+  {SourceKind::Mux4067, 3}, {SourceKind::Mux4067, 4}, {SourceKind::Mux4067, 5},
+  {SourceKind::Mux4067, 6}, {SourceKind::Mux4067, 7}, {SourceKind::Mux4067, 8},
+  {SourceKind::Mux4067, 9}, {SourceKind::Mux4067, 10},
+  // INPUT_BUTTON_12-15 (SW dos 4 encoders) -> MCP23017 GPB0-GPB3 (bits 8-11).
+  // Ficam ao lado dos proprios encoders no mesmo conector do KY-040 — é o
+  // unico motivo de estarem no MCP e nao no mux: encurta a fiacao.
+  {SourceKind::Mcp23017, 8},  {SourceKind::Mcp23017, 9},
+  {SourceKind::Mcp23017, 10}, {SourceKind::Mcp23017, 11},
+  // INPUT_IGNITION_ON/IGN -> 74HC4067 C12/C13
+  {SourceKind::Mux4067, 12}, {SourceKind::Mux4067, 13},
+  // INPUT_START_ENGINE -> 74HC4067 C11
+  {SourceKind::Mux4067, 11},
+  // INPUT_HANDBRAKE -> 74HC4067 C14
+  {SourceKind::Mux4067, 14},
+  // INPUT_KILL_SWITCH_01-04 -> MCP23017 GPB4-GPB7 (bits 12-15)
   {SourceKind::Mcp23017, 12}, {SourceKind::Mcp23017, 13},
-  // INPUT_START_ENGINE -> MCP23017 GPB3 (bit 11)
-  {SourceKind::Mcp23017, 11},
-  // INPUT_HANDBRAKE -> 74HC4067 C8
-  {SourceKind::Mux4067, 8},
-  // INPUT_KILL_SWITCH_01-04 -> 74HC4067 C4-C7
-  {SourceKind::Mux4067, 4}, {SourceKind::Mux4067, 5},
-  {SourceKind::Mux4067, 6}, {SourceKind::Mux4067, 7},
-  // INPUT_ENCODER_01..04 _CW/_CCW -> encoders 0-3 (lib/encoders)
+  {SourceKind::Mcp23017, 14}, {SourceKind::Mcp23017, 15},
+  // INPUT_ENCODER_01..04 _CW/_CCW -> encoders 0-3 (lib/encoders, modo
+  // externo: CLK/DT vem do banco A do MCP23017, amostrado pela task abaixo)
   {SourceKind::EncoderCw, 0}, {SourceKind::EncoderCcw, 0},
   {SourceKind::EncoderCw, 1}, {SourceKind::EncoderCcw, 1},
   {SourceKind::EncoderCw, 2}, {SourceKind::EncoderCcw, 2},
@@ -93,6 +95,50 @@ void pushEvent(uint8_t id, InputEventType ev) {
   rt.queueCount++;
 }
 
+// --- Task de amostragem do MCP23017 -----------------------------------
+//
+// POR QUE EXISTE: depois da revisao 2 do pinout (ver include/board_config.h)
+// os 8 sinais de quadratura dos encoders vem do banco A do MCP23017, por
+// I2C. I2C nao tem interrupcao por borda — quem descobre as transicoes e'
+// a amostragem. E o loop() principal termina com delay(5), ou seja,
+// amostraria a 200 Hz: lento demais, perderia detent (a conta completa esta
+// no comentario de BOARD_MCP_SAMPLE_PERIOD_MS).
+//
+// Por isso a leitura do MCP23017 saiu de inputs_update() e virou esta task
+// dedicada, com periodo proprio, independente do que o loop() esteja
+// fazendo (render de LED, WiFi, OTA, serial).
+//
+// PROPRIEDADE DO BARRAMENTO: depois que esta task sobe, ela e' a UNICA a
+// chamar input_expander_update() — nada mais neste projeto toca I2C, entao
+// nao ha concorrencia no Wire. inputs_update(), no loop, so LE o cache ja
+// pronto (input_expander_get_bit), que nao faz I2C.
+//
+// CORRIDA DE LEITURA: a task escreve o estado debounced (uint16_t) enquanto
+// o loop pode le-lo. Em Xtensa uma palavra alinhada e' lida/escrita
+// atomicamente, entao o pior caso e' o loop ver o valor de 1 ms atras —
+// nunca um valor "meio escrito". Nao precisa de mutex.
+TaskHandle_t g_sampleTask = nullptr;
+
+void mcpSampleTask(void *) {
+  TickType_t lastWake = xTaskGetTickCount();
+  for (;;) {
+    // Uma unica transacao I2C traz GPIOA+GPIOB; serve tanto pros botoes
+    // (debounce interno da camada) quanto pra quadratura (cru, logo abaixo).
+    input_expander_update();
+
+    const uint16_t raw = input_expander_get_raw(); // 1 = pino HIGH
+    for (uint8_t i = 0; i < BOARD_ENCODER_COUNT; i++) {
+      encoder_feed(i,
+                   (uint8_t)((raw >> BOARD_ENCODER_MCP_CLK_BIT[i]) & 0x1),
+                   (uint8_t)((raw >> BOARD_ENCODER_MCP_DT_BIT[i]) & 0x1));
+    }
+
+    // vTaskDelayUntil (nao vTaskDelay): mantem o PERIODO fixo mesmo quando
+    // a leitura I2C demora mais num ciclo — sem acumular atraso.
+    vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(BOARD_MCP_SAMPLE_PERIOD_MS));
+  }
+}
+
 // Lê o nível atual (já debounced pela camada de baixo) de uma entrada de
 // nível. Não debounça de novo — só encaminha o que MCP23017/74HC4067 já
 // resolveram.
@@ -120,7 +166,9 @@ void inputs_init() {
   input_expander_init(BOARD_MCP23017_ADDR, BOARD_I2C_SDA_PIN, BOARD_I2C_SCL_PIN);
   mux4067_init(BOARD_MUX_S0_PIN, BOARD_MUX_S1_PIN, BOARD_MUX_S2_PIN,
                BOARD_MUX_S3_PIN, BOARD_MUX_SIG_PIN, BOARD_MUX_CHANNEL_COUNT);
-  encoder_init(BOARD_ENCODER_CLK_PIN, BOARD_ENCODER_DT_PIN);
+  // Modo externo: o driver nao toca em pino nem registra interrupcao; as
+  // amostras de CLK/DT chegam por encoder_feed(), da task abaixo.
+  encoder_init_external();
 
   for (uint8_t id = 0; id < INPUT_ID_COUNT; id++) {
     InputRuntime &rt = g_runtime[id];
@@ -128,11 +176,23 @@ void inputs_init() {
     rt.queueCount = 0;
     rt.lastLevel = (id < INPUT_LEVEL_ID_COUNT) ? readLevel(BINDINGS[id]) : false;
   }
+
+  // Task de amostragem so depois do estado inicial pronto, pra ela nao
+  // competir com a leitura de baseline acima. Fixada no core 0 (o loop()
+  // do Arduino roda no core 1), prioridade acima do loop pra que o periodo
+  // de 1 ms seja respeitado mesmo com o loop ocupado.
+  if (g_sampleTask == nullptr) {
+    xTaskCreatePinnedToCore(mcpSampleTask, "mcp_sample", 3072, nullptr,
+                             /*priority=*/3, &g_sampleTask, /*core=*/0);
+  }
 }
 
 void inputs_update() {
-  // Avanca as 3 camadas de hardware por baixo — nenhuma bloqueia.
-  input_expander_update();
+  // Avanca as camadas de hardware por baixo — nenhuma bloqueia.
+  //
+  // input_expander_update() NAO e' chamada aqui de proposito: a leitura do
+  // MCP23017 pertence a mcpSampleTask (ver comentario dela). Chamar tambem
+  // daqui colocaria duas tasks no mesmo Wire.
   mux4067_scan();
   encoder_update();
 

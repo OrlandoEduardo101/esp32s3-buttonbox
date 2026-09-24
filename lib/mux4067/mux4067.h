@@ -20,8 +20,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Pinos default conforme docs/INPUTS_PINOUT.md secao 4 (todos na faixa
-// GPIO0-21, universal em qualquer variante de ESP32-S3).
+// Pinos default do DRIVER ISOLADO (para reuso fora deste projeto).
+//
+// ATENÇÃO: neste projeto estes números NÃO valem. Desde a revisão 2 do
+// pinout, 15/16/17/18/21 são pads da face inferior da ESP32-S3 SuperMini e
+// foram abandonados — os valores reais estão em include/board_config.h
+// (GPIO4-7 e 10) e quem chama sempre os passa explicitamente.
 static const uint8_t MUX4067_DEFAULT_S0_PIN  = 15;
 static const uint8_t MUX4067_DEFAULT_S1_PIN  = 16;
 static const uint8_t MUX4067_DEFAULT_S2_PIN  = 17;

@@ -61,6 +61,12 @@ void input_expander_update() {
   g_rawPrev = raw;
 }
 
+uint16_t input_expander_get_raw() {
+  // g_rawPrev guarda exatamente a amostra da ultima update(), na convencao
+  // do chip (1 = aberto). Sem inversao aqui — ver o contrato no header.
+  return g_rawPrev;
+}
+
 uint16_t input_expander_get_state() {
   // Inverte aqui: g_stableRaw usa a convenção do chip (1=aberto), o
   // contrato desta função é "1=pressionado".

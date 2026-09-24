@@ -26,13 +26,15 @@
 // atual, já limpo, com o nível anterior) pra gerar PRESSED/RELEASED. Os
 // encoders já resolvem ruído/bounce na própria máquina de estados de
 // quadratura (lib/encoders) — aqui só encaminhamos o evento CW/CCW que eles
-// já produziram, prontos.
+// já produziram, prontos. As linhas CLK/DT, apesar de virem pelo mesmo
+// MCP23017, passam PELO CRU (input_expander_get_raw), sem o debounce de
+// 15 ms — ele apagaria justamente as transições que formam o detent.
 #pragma once
 #include <stdint.h>
 
 enum InputId : uint8_t {
   // --- Botões genéricos (têm STATE e EVENT) ---------------------------
-  // 11 push buttons físicos, no MCP23017 (docs/INPUTS_PINOUT.md secao 2).
+  // 11 push buttons físicos, no 74HC4067 (docs/INPUTS_PINOUT.md secao 3).
   INPUT_BUTTON_01 = 0,
   INPUT_BUTTON_02,
   INPUT_BUTTON_03,
@@ -44,15 +46,15 @@ enum InputId : uint8_t {
   INPUT_BUTTON_09,
   INPUT_BUTTON_10,
   INPUT_BUTTON_11,
-  // SW dos 4 encoders (clique do próprio encoder), no 74HC4067 — tratados
-  // como botão normal mapeável, mesma convenção dos 11 acima.
+  // SW dos 4 encoders (clique do próprio encoder), no MCP23017 banco B —
+  // tratados como botão normal mapeável, mesma convenção dos 11 acima.
   INPUT_BUTTON_12, // SW do encoder 1
   INPUT_BUTTON_13, // SW do encoder 2
   INPUT_BUTTON_14, // SW do encoder 3
   INPUT_BUTTON_15, // SW do encoder 4
 
   // Ignição (chave de scooter 3 posições, ver docs/INPUTS_PINOUT.md secao
-  // 2) e botão de partida — todos no MCP23017.
+  // 2) e botão de partida — todos no 74HC4067.
   INPUT_IGNITION_ON,
   INPUT_IGNITION_IGN,
   INPUT_START_ENGINE,
@@ -64,7 +66,7 @@ enum InputId : uint8_t {
   // camada — aqui só existe o fato físico, sem lógica de jogo nenhuma.
   INPUT_HANDBRAKE,
 
-  // 4 chaves tipo caça ON/OFF ("kill switches"), no 74HC4067.
+  // 4 chaves tipo caça ON/OFF ("kill switches"), no MCP23017 banco B.
   INPUT_KILL_SWITCH_01,
   INPUT_KILL_SWITCH_02,
   INPUT_KILL_SWITCH_03,
@@ -76,8 +78,9 @@ enum InputId : uint8_t {
 
   // --- Encoders (só têm EVENT — CW/CCW, sem STATE) ---------------------
   // Cada KY-040 vira 2 IDs, um por sentido (docs/INPUTS_PINOUT.md secao
-  // 8: modo "virtual +/- fixo", decidido com o usuário). CLK/DT direto na
-  // ESP32-S3; o SW de cada um já está em INPUT_BUTTON_12-15 acima.
+  // 8: modo "virtual +/- fixo", decidido com o usuário). CLK/DT no banco A
+  // do MCP23017 (revisão 2 do pinout — ver include/board_config.h); o SW de
+  // cada um já está em INPUT_BUTTON_12-15 acima.
   INPUT_ENCODER_01_CW = INPUT_LEVEL_ID_COUNT,
   INPUT_ENCODER_01_CCW,
   INPUT_ENCODER_02_CW,
@@ -101,12 +104,19 @@ enum InputEventType : uint8_t {
 // Inicializa as 3 camadas de hardware por baixo (MCP23017, 74HC4067,
 // encoders) com os parâmetros do mapa aprovado — quem chama esta função
 // não precisa saber quantos canais o mux usa, nem endereço I2C, nem pinos.
+//
+// Sobe também a task dedicada que amostra o MCP23017 (core 0, período de
+// BOARD_MCP_SAMPLE_PERIOD_MS): é dela que sai a quadratura dos encoders,
+// que não pode depender da cadência do loop() principal. Depois disso, essa
+// task é a única dona do barramento I2C — não chame input_expander_update()
+// de nenhum outro lugar.
 void inputs_init();
 
-// Atualiza tudo: faz o polling do MCP23017 e do 74HC4067, drena os
-// encoders, e gera os eventos PRESSED/RELEASED/CW/CCW por transição.
-// Não bloqueia (delega para input_expander_update()/mux4067_scan()/
-// encoder_update(), todas não-bloqueantes). Chamar com a maior frequência
+// Atualiza tudo: varre o 74HC4067, drena os encoders e gera os eventos
+// PRESSED/RELEASED/CW/CCW por transição. O MCP23017 NÃO é lido aqui — quem
+// lê é a task criada por inputs_init(); esta função só consome o cache que
+// ela mantém, sem tocar no I2C. Não bloqueia (delega para mux4067_scan()/
+// encoder_update(), ambas não-bloqueantes). Chamar com a maior frequência
 // possível a partir do loop() de quem consumir esta API.
 void inputs_update();
 
