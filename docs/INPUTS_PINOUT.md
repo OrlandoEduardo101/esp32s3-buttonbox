@@ -151,12 +151,13 @@ pull-up interno (~100 kΩ) ligado em todos, sem inversão de polaridade
 (`IPOL = 0`, mantendo aberto=HIGH), `SEQOP` habilitado para ler GPIOA+GPIOB
 numa única transação I2C e `IOCON.MIRROR = 1` (INTA/INTB espelhados).
 
-O `MIRROR` já está ligado, mas o **INT não é usado** hoje: a amostragem é
-periódica (task dedicada, ver a seção "O preço dessa troca" no topo). Para
-migrar para leitura orientada a evento no futuro, o que falta é habilitar
+O `MIRROR` já está ligado, mas o **INT não é usado nem fiado**: a amostragem
+é periódica (task dedicada, ver a seção "O preço dessa troca" no topo).
+Migrar para leitura orientada a evento no futuro exigiria habilitar
 `GPINTEN` nos pinos desejados com `INTCON = 0` (interrupção por mudança de
-estado, não por comparação com `DEFVAL`) e um `attachInterrupt` no GPIO14 —
-sem mudança de hardware, desde que o INT já esteja fiado.
+estado, não por comparação com `DEFVAL`), um fio novo do INTA até um GPIO de
+header livre e um `attachInterrupt` nele. Ou seja: **é mudança de hardware**,
+não só de firmware.
 
 > Cuidado ao fazer isso: se uma mudança acontecer entre a leitura de GPIO e
 > o rearme, o INT pode ficar travado em nível ativo e nenhuma borda nova
@@ -249,11 +250,16 @@ para quando for portar a lógica):
 | GPIO8 | I2C SDA (MCP23017) — pino default do core Arduino-ESP32 (`pins_arduino.h`) |
 | GPIO9 | I2C SCL (MCP23017) — pino default do core |
 | GPIO10 | 74HC4067 — SIG |
-| GPIO14 | MCP23017 — INT (espelhado A+B). **Reservado, não usado** pelo firmware atual (a amostragem é periódica); fiar mesmo assim |
 
-11 GPIOs usados, **todos na faixa GPIO0-14** — exatamente a faixa que a
-ESP32-S3 SuperMini expõe em header. Nenhum pad da face inferior é
+10 GPIOs usados, **todos na faixa GPIO0-10**. Nenhum pad da face inferior é
 necessário.
+
+> **O INT do MCP23017 não é fiado.** Uma versão anterior deste documento
+> reservava o GPIO14 para ele. Era erro duplo: o firmware nunca habilita
+> `GPINTEN` nem registra `attachInterrupt` (a amostragem é periódica, seção
+> "O preço dessa troca"), e o **GPIO14 também é pad da face inferior** nesta
+> placa — justamente o que esta revisão existe para evitar. Deixe INTA e
+> INTB do MCP23017 sem conexão.
 
 Pinos deliberadamente **evitados** nesta alocação:
 - **GPIO3, GPIO45, GPIO46** — strapping pins do ESP32-S3 (afetam modo de
@@ -517,8 +523,7 @@ resistor nenhum**, porque o firmware liga pull-ups internos.
 | MCP23017 | **RESET** | **3,3 V** | não deixar flutuando — o chip pode ficar preso em reset. Algumas placas breakout já trazem isso resolvido; confira a sua |
 | MCP23017 | A0, A1, A2 | **GND** | endereço I2C `0x20` (é o que `board_config.h` espera) |
 | MCP23017 | SDA / SCL | GPIO8 / GPIO9 | precisam de pull-up I2C (~4,7 kΩ → 3,3 V). Breakouts costumam já ter; chip solto, não. **Com a quadratura no I2C, um barramento marginal deixa de ser "às vezes falha um botão" e vira detent perdido** — se tiver dúvida, ponha os 4,7 kΩ |
-| MCP23017 | INT (ou INTA) | GPIO14 | **reservado**: o firmware atual não usa. Fiar mesmo assim, é de graça e evita refazer a placa se a amostragem virar orientada a evento |
-| MCP23017 | INTB | não conectar | `IOCON.MIRROR = 1` espelha os dois bancos numa linha só |
+| MCP23017 | INTA e INTB | **não conectar** | o firmware não usa interrupção do expansor; a amostragem é periódica. Em muitos breakouts (CJMCU-2317 incluso) essas saídas nem chegam ao header |
 | 74HC4067 | VCC / GND | 3,3 V / GND | |
 | 74HC4067 | **EN (/E)** | **GND** | ativo em nível baixo: em `HIGH` (ou flutuando) desliga todos os canais. Algumas placas já aterram; confira a sua |
 | 74HC4067 | S0 / S1 / S2 / S3 | GPIO4 / GPIO5 / GPIO6 / GPIO7 | conforme `include/board_config.h` |

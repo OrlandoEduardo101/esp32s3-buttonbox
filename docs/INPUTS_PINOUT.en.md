@@ -152,12 +152,12 @@ internal pull-up (~100 kΩ) enabled, no polarity inversion (`IPOL = 0`, keeping
 open=HIGH), `SEQOP` enabled so GPIOA+GPIOB come back in a single I2C
 transaction, and `IOCON.MIRROR = 1` (INTA/INTB mirrored).
 
-`MIRROR` is already on, but **INT is not used** today: sampling is periodic
-(dedicated task, see "The price of this trade" at the top). To move to
-event-driven reads later, what is missing is enabling `GPINTEN` on the desired
-pins with `INTCON = 0` (interrupt-on-change, not compare-against-`DEFVAL`) plus
-an `attachInterrupt` on GPIO14 — no hardware change, provided INT is already
-wired.
+`MIRROR` is already on, but **INT is neither used nor wired**: sampling is
+periodic (dedicated task, see "The price of this trade" at the top). Moving to
+event-driven reads later would require enabling `GPINTEN` on the desired pins
+with `INTCON = 0` (interrupt-on-change, not compare-against-`DEFVAL`), a new
+wire from INTA to a free header GPIO, and an `attachInterrupt` on it. In other
+words: **that is a hardware change**, not just firmware.
 
 > Careful if you do: if a change happens between the GPIO read and the re-arm,
 > INT can latch active and no new edge ever arrives. Whoever implements it must
@@ -249,10 +249,15 @@ for when the logic gets ported):
 | GPIO8 | I2C SDA (MCP23017) — Arduino-ESP32 core default (`pins_arduino.h`) |
 | GPIO9 | I2C SCL (MCP23017) — core default |
 | GPIO10 | 74HC4067 — SIG |
-| GPIO14 | MCP23017 — INT (A+B mirrored). **Reserved, unused** by the current firmware (sampling is periodic); wire it anyway |
 
-11 GPIOs used, **all within GPIO0-14** — exactly the range the ESP32-S3
-SuperMini exposes on headers. No underside pad is required.
+10 GPIOs used, **all within GPIO0-10**. No underside pad is required.
+
+> **The MCP23017 INT is not wired.** An earlier version of this document
+> reserved GPIO14 for it. That was doubly wrong: the firmware never enables
+> `GPINTEN` nor attaches an interrupt (sampling is periodic, see "The price
+> of this trade"), and **GPIO14 is also an underside pad** on this board —
+> exactly what this revision exists to avoid. Leave the MCP23017 INTA and
+> INTB unconnected.
 
 Pins deliberately **avoided** in this allocation:
 - **GPIO3, GPIO45, GPIO46** — ESP32-S3 strapping pins (affect boot mode / flash
@@ -523,8 +528,7 @@ internal pull-ups.
 | MCP23017 | **RESET** | **3.3 V** | do not leave floating — the chip can sit stuck in reset. Some breakouts already handle this; check yours |
 | MCP23017 | A0, A1, A2 | **GND** | I2C address `0x20` (what `board_config.h` expects) |
 | MCP23017 | SDA / SCL | GPIO8 / GPIO9 | need I2C pull-ups (~4.7 kΩ → 3.3 V). Breakouts usually have them; a bare chip does not. **With quadrature now riding on I2C, a marginal bus stops being "a button glitches sometimes" and becomes a dropped detent** — if in doubt, fit the 4.7 kΩ |
-| MCP23017 | INT (or INTA) | GPIO14 | **reserved**: the current firmware does not use it. Wire it anyway — it is free and saves a board respin if sampling becomes event-driven |
-| MCP23017 | INTB | leave unconnected | `IOCON.MIRROR = 1` mirrors both ports onto one line |
+| MCP23017 | INTA and INTB | **leave unconnected** | the firmware does not use the expander's interrupt; sampling is periodic. On many breakouts (the CJMCU-2317 included) those outputs do not even reach the header |
 | 74HC4067 | VCC / GND | 3.3 V / GND | |
 | 74HC4067 | **EN (/E)** | **GND** | active low: at `HIGH` (or floating) it disables every channel. Some boards already ground it; check yours |
 | 74HC4067 | S0 / S1 / S2 / S3 | GPIO4 / GPIO5 / GPIO6 / GPIO7 | per `include/board_config.h` |

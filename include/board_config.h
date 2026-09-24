@@ -50,14 +50,19 @@ static const uint8_t  BOARD_I2C_SDA_PIN   = 8;
 static const uint8_t  BOARD_I2C_SCL_PIN   = 9;
 static const uint8_t  BOARD_MCP23017_ADDR = 0x20; // A0/A1/A2 no GND
 
-// Pino do INT do MCP23017. RESERVADO, ainda NÃO usado pelo firmware: a
-// amostragem é por task periódica (ver BOARD_MCP_SAMPLE_PERIOD_MS), que
-// não precisa de INT e não tem a corrida clássica de "INT travado" quando
-// uma mudança acontece entre a leitura e o rearme. Está aqui porque o pino
-// fica fisicamente livre e vale a pena fiar desde já: se um dia a
-// amostragem virar orientada a evento, é só ligar GPINTEN no chip e
-// attachInterrupt aqui, sem refazer a placa.
-static const uint8_t  BOARD_MCP23017_INT_PIN = 14;
+// INT do MCP23017: NAO FIAR. Removido do mapa de proposito.
+//
+// O INT (INTA/INTB do chip) e a saida que o MCP23017 aciona sozinho quando
+// uma entrada habilitada muda — serve para o MCU nao precisar ficar
+// perguntando. Este firmware nunca habilita GPINTEN nem registra
+// attachInterrupt: a amostragem e periodica (ver a constante abaixo), entao
+// o INT nao tem funcao nenhuma aqui.
+//
+// Uma revisao anterior deste arquivo reservava o GPIO14 para ele. Era um
+// erro duplo: alem de inutil, o GPIO14 na ESP32-S3 SuperMini/S3 Zero e um
+// pad da face inferior — exatamente o tipo de pino que esta revisao existe
+// para evitar. Se um dia a amostragem virar orientada a evento, escolha um
+// GPIO de header LIVRE na epoca e declare aqui; nao volte pro 14.
 
 // Período de amostragem do MCP23017 pela task dedicada de lib/inputs.
 //
@@ -116,6 +121,8 @@ static const uint8_t BOARD_START_ENGINE_LED_PIN = 2;
 // ======================================================================
 static const uint8_t BOARD_BOOT_PIN = 0;
 
-// GPIO 11, 12 e 13 ficam LIVRES em header nesta revisão (além do 3, que é
-// strapping e é melhor não usar). Qualquer expansão futura entra por aí,
-// pelo canal C15 livre do mux, ou por um segundo MCP23017 no mesmo I2C.
+// GPIO 11, 12 e 13 ficam LIVRES nesta revisão (além do 3, que é strapping e
+// é melhor não usar). Qualquer expansão futura entra por aí, pelo canal C15
+// livre do mux, ou por um segundo MCP23017 no mesmo I2C — este último não
+// custa pino nenhum, e é o caminho preferido enquanto a placa for a
+// SuperMini.
