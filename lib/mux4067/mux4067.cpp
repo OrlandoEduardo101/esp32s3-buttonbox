@@ -75,9 +75,9 @@ void mux4067_init(uint8_t s0Pin, uint8_t s1Pin, uint8_t s2Pin, uint8_t s3Pin,
   pinMode(g_s1, OUTPUT);
   pinMode(g_s2, OUTPUT);
   pinMode(g_s3, OUTPUT);
-  // Pull-up interno da ESP32 como rede de seguranca: canais livres/ainda
-  // nao fiados leem HIGH (aberto) em vez de flutuar. Canais em uso devem
-  // ter tambem seu proprio pull-up externo, conforme docs/INPUTS_PINOUT.md.
+  // Pull-up interno da ESP32 na linha SIG comum: serve todos os canais
+  // (o mux liga o selecionado ao SIG) e faz canais livres/nao fiados lerem
+  // HIGH em vez de flutuar. Nao e' preciso resistor por entrada.
   pinMode(g_sig, INPUT_PULLUP);
 
   g_currentChannel = 0;

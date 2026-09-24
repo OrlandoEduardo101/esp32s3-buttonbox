@@ -43,9 +43,11 @@ static const uint32_t MUX4067_SETTLE_US = 30;
 // mecanicos equivalentes.
 static const uint32_t MUX4067_DEBOUNCE_MS = 15;
 
-// Configura S0-S3 como saida e SIG como entrada (com pull-up interno da
-// ESP32 como rede de seguranca para canais nao conectados/livres — cada
-// canal em uso já deve ter seu proprio pull-up, ver docs/INPUTS_PINOUT.md).
+// Configura S0-S3 como saida e SIG como entrada com pull-up interno da
+// ESP32. Como o mux liga o canal selecionado ao SIG, esse unico pull-up
+// serve todos os canais: chave no GND = LOW, aberta = HIGH, sem resistor
+// por entrada. Um resistor externo unico (SIG -> 3V3) so e' opcional, se
+// a leitura ficar instavel — ver docs/INPUTS_PINOUT.md secao 11.
 //
 // channelCount: quantos dos 16 canais (C0..C{channelCount-1}) devem ser
 // varridos por mux4067_scan(). NÃO é preciso usar os 16 — o mapa aprovado

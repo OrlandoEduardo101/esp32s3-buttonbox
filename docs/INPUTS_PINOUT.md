@@ -166,9 +166,10 @@ GPIO do ESP32-S3 — ver seção 4):
 | S3 | Bit 3 do endereço do canal |
 | SIG | Saída comum — a ESP32 lê aqui o estado do canal atualmente selecionado |
 
-Cada entrada no mux precisa de resistor pull-up (ou pull-down, conforme a
-lógica escolhida) **no próprio canal**, já que o 4067 apenas conecta o canal
-selecionado ao SIG — ele não fornece pull-up interno como o MCP23017.
+O 74HC4067 não tem pull-up próprio (ao contrário do MCP23017), mas o
+firmware liga o pull-up interno da ESP32 na linha SIG, que serve todos os
+canais — nenhum resistor por entrada é necessário. Detalhes e a única
+recomendação opcional na seção 11.
 
 ---
 
@@ -450,70 +451,139 @@ Testar no `joy.cpl`, com o hardware fisicamente montado:
 
 ## 11. Diagrama de soldagem — GND ou VCC?
 
-Todos os botões e chaves deste projeto usam lógica **active-low** (pino vai
-para **GND** quando ativado). O que varia por subsistema é quem fornece o
-pull-up.
+**Regra geral: todo botão/chave tem um terminal no pino/canal de entrada e o
+outro terminal no GND. Nunca no VCC.** A lógica é *active-low*: em repouso o
+pino lê `HIGH` (puxado pra cima por um pull-up), e ao fechar o contato ele é
+puxado pro GND e lê `LOW`. Tudo é 3,3 V. O que varia por subsistema é
+*quem fornece o pull-up* — e, na maioria dos casos, **você não solda
+resistor nenhum**, porque o firmware liga pull-ups internos.
+
+> **Correção (2026-09-24).** Uma versão anterior deste documento (e um
+> comentário em `lib/mux4067`) dizia que **cada** entrada do 74HC4067
+> precisava de um resistor externo de 10 kΩ. Isso estava exagerado: o
+> firmware já liga o pull-up interno da ESP32 na linha SIG
+> (`lib/mux4067/mux4067.cpp`, `pinMode(g_sig, INPUT_PULLUP)`), e o mux
+> conecta o canal selecionado ao SIG, então esse pull-up já serve todos os
+> canais. Não é preciso um resistor por entrada.
+
+### Ligações de alimentação e controle (o que costuma fazer "nada funcionar")
+
+| Chip | Pino | Liga em | Observação |
+|---|---|---|---|
+| ESP32-S3 | 3V3 / GND | trilho 3,3 V / GND comum | tudo referenciado ao mesmo GND |
+| MCP23017 | VDD / VSS | 3,3 V / GND | |
+| MCP23017 | **RESET** | **3,3 V** | não deixar flutuando — o chip pode ficar preso em reset. Algumas placas breakout já trazem isso resolvido; confira a sua |
+| MCP23017 | A0, A1, A2 | **GND** | endereço I2C `0x20` (é o que `board_config.h` espera) |
+| MCP23017 | SDA / SCL | GPIO8 / GPIO9 | precisam de pull-up I2C (~4,7 kΩ → 3,3 V). Breakouts costumam já ter; chip solto, não |
+| MCP23017 | INTA / INTB | não conectar | o firmware usa polling, não usa interrupção do chip |
+| 74HC4067 | VCC / GND | 3,3 V / GND | |
+| 74HC4067 | **EN (/E)** | **GND** | ativo em nível baixo: em `HIGH` (ou flutuando) desliga todos os canais. Algumas placas já aterram; confira a sua |
+| 74HC4067 | S0–S3 / SIG | GPIO15–18 / GPIO21 | conforme `include/board_config.h` |
+| KY-040 | `+` | **3,3 V (não 5 V)** | o pull-up da placa vai pra esse pino; em 5 V injetaria 5 V nas entradas da ESP32 |
 
 ### Push buttons 1–11, Start Engine, Ignição (MCP23017)
 
-O MCP23017 possui **pull-up interno** (habilitado via `GPPU`). Não é
-necessário resistor externo.
+O MCP23017 tem **pull-up interno** (~100 kΩ, habilitado via `GPPU`).
+Nenhum resistor externo.
 
 ```
-Botão/chave (terminal NO) ──→  Pino do MCP23017 (GPA0–GPB5)
-Outro terminal             ──→  GND
+Terminal 1 do botão/chave ──→  Pino do MCP23017 (GPA0–GPB5)
+Terminal 2                ──→  GND
 ```
 
-Lógica: pino lê `HIGH` em repouso → cai para `LOW` ao pressionar.
+Lógica: pino lê `HIGH` em repouso → `LOW` ao pressionar.
 
-### SW dos encoders (C0–C3), Chaves caça (C4–C7), Freio de estacionamento (C8) — 74HC4067
+### Chaves caça (C4–C7) e freio de estacionamento (C8) — 74HC4067
 
-O 74HC4067 **não possui pull-up interno**. É necessário um resistor de
-**10 kΩ entre o canal e o 3,3 V** em cada entrada.
-
-```
-Canal Cx do 74HC4067 ──┬──→  Chave/SW (terminal 1)
-                       │      Chave/SW (terminal 2) ──→  GND
-                     10 kΩ
-                       │
-                     3,3 V
-```
-
-Lógica: canal lê `HIGH` em repouso (resistor mantém) → cai para `LOW` ao
-fechar o contato.
-
-### CLK / DT dos encoders KY-040 (GPIO direto do ESP32-S3)
-
-O módulo KY-040 já possui **pull-up na própria PCB** para CLK e DT. Não é
-necessário resistor externo nem pull-up interno do ESP32.
+Chaves "nuas" (só dois terminais). O pull-up interno da ESP32 na linha SIG
+já resolve — **nenhum resistor por entrada**.
 
 ```
-KY-040  CLK  ──→  GPIO conforme tabela (GPIO4/6/10/12)
-        DT   ──→  GPIO conforme tabela (GPIO5/7/11/13)
+Canal Cx do 74HC4067 ──→  Terminal 1 da chave
+                          Terminal 2 da chave ──→  GND
+```
+
+**Opcional, só se o `mux-test` mostrar leitura instável** (mais provável
+com fios longos): **um único** resistor de 10 kΩ entre a linha **SIG
+(GPIO21)** e o 3,3 V. Como o SIG é comum a todos os canais, esse resistor
+serve os nove de uma vez. *Isto é uma expectativa pela física do circuito;
+ainda não foi medido no hardware montado — teste sem, e só adicione se
+precisar.*
+
+**Freio de estacionamento:** o firmware trata "contato fechado no GND" como
+acionado. Qual posição da alavanca fecha o contato depende de você usar o
+terminal NO ou NC do microswitch; se ficar invertido, troque o terminal.
+
+### SW dos encoders (C0–C3) — KY-040 → 74HC4067
+
+O SW **não** é uma chave nua: é o pino `SW` do módulo, e o KY-040 padrão
+já traz pull-up de 10 kΩ na placa em CLK, DT **e** SW. Então nada a soldar:
+
+```
+KY-040  SW  ──→  Canal C0–C3 do 74HC4067
+        GND ──→  GND
+        +   ──→  3,3 V
+```
+
+Confira no seu módulo com o multímetro (medir entre `SW` e `+` deve dar
+~10 kΩ); alguns clones não têm o pull-up do SW — nesse caso o pull-up
+interno da linha SIG cobre.
+
+### CLK / DT dos encoders KY-040 (GPIO direto da ESP32-S3)
+
+O módulo já tem pull-up na própria PCB (e o firmware liga o interno também,
+o que é inofensivo).
+
+```
+KY-040  CLK  ──→  GPIO4 / 6 / 10 / 12   (encoders 1–4)
+        DT   ──→  GPIO5 / 7 / 11 / 13
         GND  ──→  GND
-        VCC  ──→  3,3 V
+        +    ──→  3,3 V
 ```
 
-### LED do botão Start Engine (GPIO2)
+### Ignição (3 posições, chave de scooter)
 
 ```
-LED ânodo (+) ──→  220 Ω ──→  GPIO2 do ESP32-S3
-LED cátodo / COM ──→  GND
+COM (comum)          ──→  GND
+Contato ON           ──→  GPB4 do MCP23017
+Contato IGN (partida)──→  GPB5 do MCP23017
 ```
 
-Resistor calculado para 3,3 V: `R = (3,3 V − Vf) / I` com `Vf ≈ 2,0 V`
-(LED vermelho) e `I ≈ 6–9 mA` → 220–150 Ω. Mínimo recomendado: 100 Ω.
+Confirme com o multímetro, antes de fiar, que o contato ON continua
+fechado na posição 3 (partida) — ver a seção 2.
+
+### Botão Start Engine (3 terminais) e o LED dele
+
+```
+COM            ──→  GND               (serve pra chave E pro LED)
+Chave (NO)     ──→  GPB3 do MCP23017
+LED ânodo (+)  ──→  220 Ω ──→  GPIO2 da ESP32-S3
+```
+
+Resistor para 3,3 V: `R = (3,3 V − Vf) / I` com `Vf ≈ 2,0 V` (LED
+vermelho) e `I ≈ 6–9 mA` → 220–150 Ω. Mínimo recomendado: 100 Ω.
+
+> **Atenção:** o firmware **ainda não aciona o GPIO2**. Ligado assim, o LED
+> não acende sozinho — a lógica (ex.: acender com a ignição em ON) ainda
+> não foi implementada.
+
+### Matriz + fita WS2812
+
+Alimentação **5 V externa** direto na matriz/fita (~4,4 A no pico com 74
+LEDs em branco cheio — a USB da ESP32 não aguenta), **GND comum** com a
+ESP32, dado `GPIO1 → DIN da matriz → DOUT da matriz → DIN da fita`. Recomendado:
+capacitor ~1000 µF entre +5 V e GND perto do primeiro LED e resistor
+~330–470 Ω em série no fio de dado.
 
 ### Tabela-resumo
 
 | Componente | Terminal 1 vai para | Terminal 2 vai para | Pull-up |
 |---|---|---|---|
-| Push buttons 1–11 | Pino MCP23017 (GPA0–GPA7, GPB0–GPB2) | **GND** | Interno do MCP (10 kΩ) |
+| Push buttons 1–11 | Pino MCP23017 (GPA0–GPA7, GPB0–GPB2) | **GND** | Interno do MCP (~100 kΩ) |
 | Start Engine (chave) | MCP23017 GPB3 | **GND** (via COM) | Interno do MCP |
-| Ignição — ON | MCP23017 GPB4 | **GND** | Interno do MCP |
-| Ignição — IGN | MCP23017 GPB5 | **GND** | Interno do MCP |
-| SW encoders (clique) | Canal 74HC4067 C0–C3 | **GND** | **Externo 10 kΩ → 3,3V** |
-| Chaves caça 1–4 | Canal 74HC4067 C4–C7 | **GND** | **Externo 10 kΩ → 3,3V** |
-| Freio de estacionamento | Canal 74HC4067 C8 | **GND** | **Externo 10 kΩ → 3,3V** |
-| KY-040 CLK/DT | GPIO ESP32 direto | — | Na PCB do módulo |
-| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — |
+| Ignição — ON / IGN | MCP23017 GPB4 / GPB5 | **GND** (via COM) | Interno do MCP |
+| SW dos encoders | Canal 74HC4067 C0–C3 | módulo KY-040 (GND/`+`) | Na PCB do KY-040 |
+| Chaves caça 1–4 | Canal 74HC4067 C4–C7 | **GND** | Interno da ESP32 na linha SIG |
+| Freio de estacionamento | Canal 74HC4067 C8 | **GND** | Interno da ESP32 na linha SIG |
+| KY-040 CLK/DT | GPIO da ESP32 direto | — | Na PCB do KY-040 |
+| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — (não aplicável; GPIO2 ainda não é acionado) |
