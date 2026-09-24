@@ -33,14 +33,37 @@
 #include "secrets.h"
 #include "esp32-hal-tinyusb.h" // usb_persist_restart() — ver nota no comando BOOTLOADER
 #include "esp_system.h"
+#include <Preferences.h>   // NVS: persistir brilho dos LEDs entre boots
 #include "inputs.h" // camada unificada de entradas (MCP23017+74HC4067+encoders)
 #include "simhub.h" // protocolo Standard Serial do SimHub, sobre o mesmo CDC
 #include "ws2812.h" // driver da fita/matriz WS2812 (RMT) — so desenha, nao conhece SimHub
+#include "led_idle.h" // animacao de espera — so usada com o SimHub desconectado
 #include "board_config.h" // mapa unico de pinos deste projeto — mude so aqui pra outra placa
 
 USBHIDGamepad Gamepad;
 
-// ---------------------------------------------------------------------
+// NVS: namespace "bbox", chave "brightness". Preferences e' thread-safe
+// entre o loop e callbacks do WiFiManager (que roda em outra task), mas
+// aqui so escrevemos do loop — sem risco de concorrencia.
+static Preferences g_prefs;
+
+// Carrega o brilho do NVS e aplica no driver; usado so no setup().
+static void nvsLoadBrightness() {
+  g_prefs.begin("bbox", /*readOnly=*/false);
+  const uint8_t saved = g_prefs.getUChar("brightness", WS2812_BRIGHTNESS_DEFAULT_PCT);
+  g_prefs.end();
+  ws2812_set_brightness(saved); // grama automaticamente para 25-75
+  Serial.printf("[brightness] carregado do NVS: %u%%\n", ws2812_get_brightness());
+}
+
+// Salva o brilho atual no NVS. So chama depois de ws2812_set_brightness().
+static void nvsSaveBrightness() {
+  g_prefs.begin("bbox", /*readOnly=*/false);
+  g_prefs.putUChar("brightness", ws2812_get_brightness());
+  g_prefs.end();
+}
+
+
 // Mapa explicito: INPUT LOGICAL ID (lib/inputs/inputs.h) -> bit do HID
 // (uint32_t buttons do USBHIDGamepad). Regra unica e verificavel: o bit
 // usado e o proprio valor numerico do InputId (0-30) — o enum ja e 0-based
@@ -270,6 +293,27 @@ static void serialCommands() {
         }
         Serial.println();
       }
+      else if (strncmp(line, "BRIGHTNESS ", 11) == 0) {
+        // Define o limite global de brilho dos LEDs (25-75%).
+        // Exemplos: "BRIGHTNESS 60" -> 60%, "BRIGHTNESS 25" -> mínimo,
+        //           "BRIGHTNESS 75" -> máximo.
+        // Persiste em NVS: sobrevive a reboot/power cycle.
+        // Resposta: "BRIGHTNESS_SET <valor_real>%" — o valor real pode ser
+        // diferente do pedido se estiver fora da faixa permitida.
+        const int pct = atoi(line + 11);
+        if (pct < 1 || pct > 100) {
+          Serial.printf("BRIGHTNESS_INVALID (25-%u)\n",
+                        (unsigned)WS2812_BRIGHTNESS_MAX_PCT);
+        } else {
+          const uint8_t applied = ws2812_set_brightness((uint8_t)pct);
+          nvsSaveBrightness();
+          Serial.printf("BRIGHTNESS_SET %u%%\n", (unsigned)applied);
+        }
+      }
+      else if (strcmp(line, "BRIGHTNESS") == 0) {
+        // Sem argumento: so consulta o valor atual, sem alterar nem gravar.
+        Serial.printf("BRIGHTNESS_GET %u%%\n", (unsigned)ws2812_get_brightness());
+      }
       else if (strcmp(line, "BOOTLOADER") == 0) {
         // Entra em modo download por software, dispensando segurar o botao
         // BOOT. Com ARDUINO_USB_MODE=0 o USB-Serial-JTAG some, e o esptool
@@ -336,6 +380,11 @@ void setup() {
     Serial.println("[ws2812] AVISO: falha ao inicializar canal RMT");
   }
 
+  // Brilho: restaura do NVS (padrao 60% se nunca foi salvo). Deve ser
+  // chamado APOS ws2812_init(), pois ws2812_set_brightness() so escreve
+  // em RAM — o driver precisa estar pronto antes de qualquer ws2812_show().
+  nvsLoadBrightness();
+
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -372,6 +421,22 @@ void loop() {
   {
     static Ws2812Color ledBuf[WS2812_MAX_LEDS];
 
+    // Sem SimHub conectado (recem-ligado, ou SimHub fechado ha mais de 5 s)
+    // os framebuffers dele estao zerados — em vez de deixar tudo apagado,
+    // mostra a animacao de espera (lib/led_idle). Assim que o SimHub voltar
+    // a falar com a placa, simhub_is_connected() fica true e as cores dele
+    // assumem na hora. A animacao nao e' efeito de jogo: so existe nesse
+    // estado, e LED_IDLE_BRIGHTNESS = 0 (em led_idle.h) a desliga.
+    static LedIdleColor idleMatrix[SIMHUB_MATRIX_LED_COUNT];
+    static LedIdleColor idleStrip[SIMHUB_STRIP_COUNT_MAX];
+    const bool idle = !simhub_is_connected();
+    const uint16_t stripCount = simhub_get_strip_count();
+    uint16_t total = SIMHUB_MATRIX_LED_COUNT + stripCount;
+    if (total > WS2812_MAX_LEDS) total = WS2812_MAX_LEDS;
+    if (idle) {
+      led_idle_render(millis(), idleMatrix, idleStrip, stripCount);
+    }
+
     // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
     // Paineis 8x8 de WS2812 quase sempre sao ligados em serpentina (linhas
     // alternadas invertidas) — MATRIX_SERPENTINE faz esse remapeamento.
@@ -385,17 +450,22 @@ void loop() {
         if ((y % 2) == 0) x = 7 - x;
         phys = y * 8 + x;
       }
-      const SimhubColor c = simhub_get_matrix_led(i);
-      ledBuf[phys] = {c.r, c.g, c.b};
+      if (idle) {
+        ledBuf[phys] = {idleMatrix[i].r, idleMatrix[i].g, idleMatrix[i].b};
+      } else {
+        const SimhubColor c = simhub_get_matrix_led(i);
+        ledBuf[phys] = {c.r, c.g, c.b};
+      }
     }
 
     // Fita, logo depois da matriz na mesma cadeia.
-    const uint16_t stripCount = simhub_get_strip_count();
-    uint16_t total = SIMHUB_MATRIX_LED_COUNT + stripCount;
-    if (total > WS2812_MAX_LEDS) total = WS2812_MAX_LEDS;
     for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
-      const SimhubColor c = simhub_get_strip_led(j);
-      ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {c.r, c.g, c.b};
+      if (idle) {
+        ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {idleStrip[j].r, idleStrip[j].g, idleStrip[j].b};
+      } else {
+        const SimhubColor c = simhub_get_strip_led(j);
+        ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {c.r, c.g, c.b};
+      }
     }
 
     ws2812_show(ledBuf, total);
