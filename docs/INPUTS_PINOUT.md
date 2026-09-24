@@ -445,3 +445,75 @@ Testar no `joy.cpl`, com o hardware fisicamente montado:
 - confirmar que o HID continua respondendo normalmente com o computador
   sem o SimHub aberto (o firmware não depende dele — SimHub só consome o
   HID que o Windows já expõe).
+
+---
+
+## 11. Diagrama de soldagem — GND ou VCC?
+
+Todos os botões e chaves deste projeto usam lógica **active-low** (pino vai
+para **GND** quando ativado). O que varia por subsistema é quem fornece o
+pull-up.
+
+### Push buttons 1–11, Start Engine, Ignição (MCP23017)
+
+O MCP23017 possui **pull-up interno** (habilitado via `GPPU`). Não é
+necessário resistor externo.
+
+```
+Botão/chave (terminal NO) ──→  Pino do MCP23017 (GPA0–GPB5)
+Outro terminal             ──→  GND
+```
+
+Lógica: pino lê `HIGH` em repouso → cai para `LOW` ao pressionar.
+
+### SW dos encoders (C0–C3), Chaves caça (C4–C7), Freio de estacionamento (C8) — 74HC4067
+
+O 74HC4067 **não possui pull-up interno**. É necessário um resistor de
+**10 kΩ entre o canal e o 3,3 V** em cada entrada.
+
+```
+Canal Cx do 74HC4067 ──┬──→  Chave/SW (terminal 1)
+                       │      Chave/SW (terminal 2) ──→  GND
+                     10 kΩ
+                       │
+                     3,3 V
+```
+
+Lógica: canal lê `HIGH` em repouso (resistor mantém) → cai para `LOW` ao
+fechar o contato.
+
+### CLK / DT dos encoders KY-040 (GPIO direto do ESP32-S3)
+
+O módulo KY-040 já possui **pull-up na própria PCB** para CLK e DT. Não é
+necessário resistor externo nem pull-up interno do ESP32.
+
+```
+KY-040  CLK  ──→  GPIO conforme tabela (GPIO4/6/10/12)
+        DT   ──→  GPIO conforme tabela (GPIO5/7/11/13)
+        GND  ──→  GND
+        VCC  ──→  3,3 V
+```
+
+### LED do botão Start Engine (GPIO2)
+
+```
+LED ânodo (+) ──→  220 Ω ──→  GPIO2 do ESP32-S3
+LED cátodo / COM ──→  GND
+```
+
+Resistor calculado para 3,3 V: `R = (3,3 V − Vf) / I` com `Vf ≈ 2,0 V`
+(LED vermelho) e `I ≈ 6–9 mA` → 220–150 Ω. Mínimo recomendado: 100 Ω.
+
+### Tabela-resumo
+
+| Componente | Terminal 1 vai para | Terminal 2 vai para | Pull-up |
+|---|---|---|---|
+| Push buttons 1–11 | Pino MCP23017 (GPA0–GPA7, GPB0–GPB2) | **GND** | Interno do MCP (10 kΩ) |
+| Start Engine (chave) | MCP23017 GPB3 | **GND** (via COM) | Interno do MCP |
+| Ignição — ON | MCP23017 GPB4 | **GND** | Interno do MCP |
+| Ignição — IGN | MCP23017 GPB5 | **GND** | Interno do MCP |
+| SW encoders (clique) | Canal 74HC4067 C0–C3 | **GND** | **Externo 10 kΩ → 3,3V** |
+| Chaves caça 1–4 | Canal 74HC4067 C4–C7 | **GND** | **Externo 10 kΩ → 3,3V** |
+| Freio de estacionamento | Canal 74HC4067 C8 | **GND** | **Externo 10 kΩ → 3,3V** |
+| KY-040 CLK/DT | GPIO ESP32 direto | — | Na PCB do módulo |
+| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — |
