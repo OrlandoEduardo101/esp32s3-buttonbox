@@ -127,6 +127,26 @@ static EncoderPulseState encoderPulse[8];
 static const uint32_t ENCODER_PULSE_HIGH_MS    = 30;
 static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 
+// LED do botao Start Engine (GPIO2) — espelha a IGNICAO, nao o botao.
+//
+// Comportamento decidido com o usuario: apagado com a chave em OFF, acende
+// quando INPUT_IGNITION_ON fecha (posicao 2) e CONTINUA aceso na posicao 3
+// (partida), porque nessa chave de scooter o contato ON nao abre durante o
+// crank — ver docs/INPUTS_PINOUT.md secao 3. Ou seja: o LED diz "a ignicao
+// esta ligada, o botao de partida esta disponivel", igual a carro de verdade.
+//
+// Eletricamente: anodo do LED -> 220R -> GPIO2, catodo no COM/GND, entao
+// HIGH acende. So escreve no pino quando o estado MUDA — nao pelo custo do
+// digitalWrite (e barato), mas pra deixar obvio no codigo que isto e' um
+// nivel estavel, nao algo que pisca.
+static void updateStartEngineLed() {
+  static int8_t lastOn = -1; // -1 = nunca escrito, forca a primeira escrita
+  const bool on = inputs_get_state(INPUT_IGNITION_ON);
+  if ((int8_t)on == lastOn) return;
+  lastOn = (int8_t)on;
+  digitalWrite(BOARD_START_ENGINE_LED_PIN, on ? HIGH : LOW);
+}
+
 static void updateEncoderPulses(uint32_t &buttons, uint32_t now) {
   for (uint8_t i = 0; i < 8; i++) {
     const InputId    id  = (InputId)(INPUT_ENCODER_01_CW + i);
@@ -410,6 +430,12 @@ void setup() {
   // fisicamente ligado ainda, os bits correspondentes simplesmente ficam
   // sempre "solto" (pull-up) — nao trava nem impede o resto do firmware.
   inputs_init();
+
+  // LED do Start Engine. Precisa vir DEPOIS de inputs_init(), porque
+  // updateStartEngineLed() le inputs_get_state(). Comeca apagado: sem esta
+  // linha o GPIO2 fica como entrada flutuante e o LED brilha fraco/oscila.
+  pinMode(BOARD_START_ENGINE_LED_PIN, OUTPUT);
+  digitalWrite(BOARD_START_ENGINE_LED_PIN, LOW);
   Serial.println("[inputs] MCP23017 + 74HC4067 + encoders inicializados");
 
   // Protocolo Standard Serial do SimHub, sobre a mesma CDC — nao mexe no
@@ -542,6 +568,10 @@ void loop() {
   // Encoders: cada detent vira um pulso momentâneo (ver
   // updateEncoderPulses no topo do arquivo), nunca um nível.
   updateEncoderPulses(buttons, now);
+
+  // LED do Start Engine acompanha a ignição (ver updateStartEngineLed no
+  // topo). Nao mexe em 'buttons' — e' saida fisica, nao entra no HID.
+  updateStartEngineLed();
 
   // BOOT segurado 5 s -> abre o portal para trocar de rede. Feito em operação,
   // não no boot: GPIO0 baixo no reset entra em modo download e o app não roda.

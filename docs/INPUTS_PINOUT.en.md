@@ -241,7 +241,7 @@ for when the logic gets ported):
 |---|---|
 | GPIO0 | Board BOOT button — only the "hold 5 s to open the WiFi portal" gesture. Does not feed HID |
 | GPIO1 | WS2812 — chain data (8x8 matrix + strip), see `docs/SYSTEM_INTEGRATION.md` |
-| GPIO2 | Start Engine button LED (output, through 220 Ω) — reserved, firmware does not drive it yet |
+| GPIO2 | Start Engine button LED (output, through 220 Ω) — lights with ignition ON, see section 6 |
 | GPIO4 | 74HC4067 — S0 |
 | GPIO5 | 74HC4067 — S1 |
 | GPIO6 | 74HC4067 — S2 |
@@ -596,9 +596,22 @@ LED anode (+)  ──→  220 Ω ──→  ESP32-S3 GPIO2
 Resistor for 3.3 V: `R = (3.3 V − Vf) / I` with `Vf ≈ 2.0 V` (red LED) and
 `I ≈ 6–9 mA` → 220–150 Ω. Recommended minimum: 100 Ω.
 
-> **Note:** the firmware **does not drive GPIO2 yet**. Wired like this the LED
-> will not light on its own — the logic (e.g. light it with ignition ON) is
-> still unimplemented.
+**Implemented behavior** (`updateStartEngineLed()` in `src/main.cpp`): the LED
+mirrors the **ignition**, not the button.
+
+| Key position | LED |
+|---|---|
+| 1 — OFF | off |
+| 2 — ON | **on** |
+| 3 — IGN/crank | **on** (the ON contact does not open while cranking — section 3) |
+
+So it says "ignition is on, the start button is available", just like a real
+car. Pressing Start Engine itself does not change the LED.
+
+> GPIO2 is configured as an output in `setup()` and starts LOW. Before that it
+> sat as a floating input, and the LED would glow faintly or flicker on its own
+> — if you saw that on an earlier firmware, that was the cause, not a solder
+> defect.
 
 ### KY-040 encoders — CLK, DT and SW, all on the MCP23017
 
@@ -648,4 +661,4 @@ series resistor on the data wire.
 | KY-040 CLK / DT | MCP23017 GPA0–GPA7 | KY-040 module (GND / `+`) | KY-040 PCB + MCP internal |
 | Encoder SW | MCP23017 GPB0–GPB3 | KY-040 module (GND / `+`) | KY-040 PCB + MCP internal |
 | Toggle switches 1–4 | MCP23017 GPB4–GPB7 | **GND** | MCP internal (~100 kΩ) |
-| Start Engine (LED) | GPIO2 through 220 Ω | **GND** (via COM) | — (n/a; GPIO2 is not driven yet) |
+| Start Engine (LED) | GPIO2 through 220 Ω | **GND** (via COM) | — (output; HIGH lights it, follows the ignition) |

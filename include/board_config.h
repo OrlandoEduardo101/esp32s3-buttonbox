@@ -107,8 +107,9 @@ static const uint8_t  BOARD_MUX_CHANNEL_COUNT  = 15; // C0-C14 (docs/INPUTS_PINO
 static const uint8_t BOARD_WS2812_PIN = 1;
 
 // ======================================================================
-// LED do botão Start Engine (saída). Reservado no mapa; o firmware ainda
-// não aciona este pino — ver docs/INPUTS_PINOUT.md secao 6.
+// LED do botão Start Engine (saída, HIGH acende). Acompanha a ignição:
+// aceso com INPUT_IGNITION_ON fechado, apagado com a chave em OFF — ver
+// updateStartEngineLed() em src/main.cpp e docs/INPUTS_PINOUT.md secao 6.
 // ======================================================================
 static const uint8_t BOARD_START_ENGINE_LED_PIN = 2;
 

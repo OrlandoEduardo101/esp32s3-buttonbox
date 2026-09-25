@@ -242,7 +242,7 @@ para quando for portar a lógica):
 |---|---|
 | GPIO0 | Botão BOOT da placa — só o gesto de abrir o portal de WiFi (segurar 5 s). Não alimenta HID |
 | GPIO1 | WS2812 — dado da cadeia (matriz 8x8 + fita), ver `docs/SYSTEM_INTEGRATION.md` |
-| GPIO2 | LED do botão Start Engine (saída, via 220 Ω) — reservado, firmware ainda não aciona |
+| GPIO2 | LED do botão Start Engine (saída, via 220 Ω) — acende com a ignição em ON, ver seção 6 |
 | GPIO4 | 74HC4067 — S0 |
 | GPIO5 | 74HC4067 — S1 |
 | GPIO6 | 74HC4067 — S2 |
@@ -592,9 +592,22 @@ LED ânodo (+)  ──→  220 Ω ──→  GPIO2 da ESP32-S3
 Resistor para 3,3 V: `R = (3,3 V − Vf) / I` com `Vf ≈ 2,0 V` (LED vermelho) e
 `I ≈ 6–9 mA` → 220–150 Ω. Mínimo recomendado: 100 Ω.
 
-> **Atenção:** o firmware **ainda não aciona o GPIO2**. Ligado assim, o LED
-> não acende sozinho — a lógica (ex.: acender com a ignição em ON) ainda não
-> foi implementada.
+**Comportamento implementado** (`updateStartEngineLed()` em `src/main.cpp`):
+o LED espelha a **ignição**, não o botão.
+
+| Posição da chave | LED |
+|---|---|
+| 1 — OFF | apagado |
+| 2 — ON | **aceso** |
+| 3 — IGN/partida | **aceso** (o contato ON não abre durante o crank — seção 3) |
+
+Ou seja, ele diz "a ignição está ligada, o botão de partida está disponível",
+igual a carro de verdade. Apertar o Start Engine em si não muda o LED.
+
+> O GPIO2 é configurado como saída no `setup()` e começa em LOW. Antes disso
+> ele ficava como entrada flutuante, e o LED dava um brilho fraco ou oscilava
+> sozinho — se você viu isso numa versão anterior do firmware, era esse o
+> motivo, não defeito de solda.
 
 ### Encoders KY-040 — CLK, DT e SW, todos no MCP23017
 
@@ -645,4 +658,4 @@ resistor ~330–470 Ω em série no fio de dado.
 | KY-040 CLK / DT | MCP23017 GPA0–GPA7 | módulo KY-040 (GND / `+`) | Na PCB do KY-040 + interno do MCP |
 | SW dos encoders | MCP23017 GPB0–GPB3 | módulo KY-040 (GND / `+`) | Na PCB do KY-040 + interno do MCP |
 | Chaves caça 1–4 | MCP23017 GPB4–GPB7 | **GND** | Interno do MCP (~100 kΩ) |
-| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — (não aplicável; GPIO2 ainda não é acionado) |
+| Start Engine (LED) | GPIO2 via 220 Ω | **GND** (via COM) | — (saída; HIGH acende, acompanha a ignição) |
