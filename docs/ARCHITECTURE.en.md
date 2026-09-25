@@ -204,6 +204,10 @@ processed in `serialCommands()`:
 | `BRIGHTNESS` | replies `BRIGHTNESS_GET <n>%` (query only) |
 | `BRIGHTNESS <n>` | caps global LED brightness. Clamped to 25-75%, so `BRIGHTNESS 10` replies `BRIGHTNESS_SET 25%` without an error; it only rejects outside 1-100. Persisted in NVS |
 | `DUMPLEDS`   | prints what arrived from SimHub (matrix and strip) without needing the physical LEDs lit |
+| `WATCH`      | toggles input-transition logging. Every press prints the **logical name** of the `InputId` (e.g. `[watch] INPUT_BUTTON_03  PRESSIONADO`). Use it to find a swapped wire without a multimeter: pressing button 4 and getting `INPUT_BUTTON_03` proves the wire is on the wrong channel. Off by default |
+| `LED`        | shows `gpio`, `override` and the ignition state the firmware reads |
+| `LED 1` / `LED 0` | forces the Start Engine LED, ignoring the key — isolates firmware from wiring |
+| `LED AUTO`   | hands LED control back to the ignition |
 | `BOOTLOADER` | replies `REBOOTING_TO_BOOTLOADER`, then enters download mode via `usb_persist_restart(RESTART_BOOTLOADER)` — see item 15 for why this is **no longer** a direct `REG_WRITE` |
 
 It also emits periodic unsolicited logs (`statusReport()`, every 5s):

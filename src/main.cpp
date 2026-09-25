@@ -139,6 +139,26 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // HIGH acende. So escreve no pino quando o estado MUDA — nao pelo custo do
 // digitalWrite (e barato), mas pra deixar obvio no codigo que isto e' um
 // nivel estavel, nao algo que pisca.
+// WATCH: imprime no serial cada transicao de entrada, com o NOME logico do
+// InputId. Existe pra achar fio trocado sem multimetro: aperte um botao e o
+// firmware diz qual entrada ele acha que foi. Se voce aperta o botao 4 e sai
+// INPUT_BUTTON_03, o fio esta no canal errado — e fim da duvida.
+//
+// Desligado por padrao: escrever no CDC custa tempo e ninguem quer esse
+// ruido no console durante uso normal.
+static bool g_watchInputs = false;
+
+static void watchInputs() {
+  if (!g_watchInputs) return;
+  for (uint8_t id = 0; id < INPUT_LEVEL_ID_COUNT; id++) {
+    InputEventType ev;
+    while ((ev = inputs_get_event((InputId)id)) != INPUT_EVENT_NONE) {
+      Serial.printf("[watch] %-26s %s\n", inputs_get_name((InputId)id),
+                    ev == INPUT_EVENT_PRESSED ? "PRESSIONADO" : "solto");
+    }
+  }
+}
+
 // -1 = automatico (segue a ignicao). 0/1 = forcado pelo comando LED, para
 // testar o pino e a fiacao sem depender de chave nenhuma.
 static int8_t g_ledOverride = -1;
@@ -320,6 +340,19 @@ static void serialCommands() {
       if      (strcmp(line, "PING") == 0)    Serial.println("PONG");
       else if (strcmp(line, "VERSION") == 0) Serial.println("ESP32S3_BUTTONBOX_HID_OTA");
       else if (strcmp(line, "IP") == 0)      Serial.println(WiFi.localIP().toString());
+      else if (strcmp(line, "WATCH") == 0) {
+        g_watchInputs = !g_watchInputs;
+        if (g_watchInputs) {
+          // Drena o que ficou acumulado enquanto estava desligado, pra nao
+          // cuspir evento velho como se fosse de agora.
+          for (uint8_t id = 0; id < INPUT_LEVEL_ID_COUNT; id++) {
+            while (inputs_get_event((InputId)id) != INPUT_EVENT_NONE) {}
+          }
+          Serial.println("WATCH_ON — aperte um controle de cada vez");
+        } else {
+          Serial.println("WATCH_OFF");
+        }
+      }
       else if (strcmp(line, "LED") == 0) {
         // Diagnostico do LED do Start Engine. Mostra o que o FIRMWARE acha,
         // pra separar "nao aciono o pino" de "o pino aciona e o LED nao
@@ -601,6 +634,8 @@ void loop() {
   // Encoders: cada detent vira um pulso momentâneo (ver
   // updateEncoderPulses no topo do arquivo), nunca um nível.
   updateEncoderPulses(buttons, now);
+
+  watchInputs(); // so faz algo com WATCH ligado; nao mexe no HID
 
   // LED do Start Engine acompanha a ignição (ver updateStartEngineLed no
   // topo). Nao mexe em 'buttons' — e' saida fisica, nao entra no HID.

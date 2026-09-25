@@ -203,6 +203,10 @@ linha-a-linha, processado em `serialCommands()`:
 | `BRIGHTNESS` | responde `BRIGHTNESS_GET <n>%` (só consulta)                     |
 | `BRIGHTNESS <n>` | limita o brilho global dos LEDs. Grampeado em 25-75%, então `BRIGHTNESS 10` responde `BRIGHTNESS_SET 25%` sem erro; só recusa fora de 1-100. Persiste em NVS |
 | `DUMPLEDS`   | imprime o que chegou do SimHub (matriz e fita) sem precisar dos LEDs físicos acesos |
+| `WATCH`      | liga/desliga o log de transições de entrada. Cada aperto imprime o **nome lógico** do `InputId` (ex.: `[watch] INPUT_BUTTON_03  PRESSIONADO`). Serve para achar fio trocado sem multímetro: apertar o botão 4 e sair `INPUT_BUTTON_03` prova que o fio está no canal errado. Desligado por padrão |
+| `LED`        | mostra `gpio`, `override` e o estado da ignição que o firmware lê |
+| `LED 1` / `LED 0` | força o LED do Start Engine, ignorando a chave — isola firmware de fiação |
+| `LED AUTO`   | devolve o controle do LED para a ignição |
 | `BOOTLOADER` | responde `REBOOTING_TO_BOOTLOADER`, depois entra em modo download via `usb_persist_restart(RESTART_BOOTLOADER)` — ver item 15 sobre por que **não** é mais um `REG_WRITE` direto |
 
 Também emite logs periódicos não-solicitados (`statusReport()`, a cada 5 s):
