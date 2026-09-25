@@ -459,7 +459,7 @@ comment at the top of `src/main.cpp`):
 | INPUT_ENCODER_02_CW / _CCW | 25 / 26 | 26 / 27 | pulse |
 | INPUT_ENCODER_03_CW / _CCW | 27 / 28 | 28 / 29 | pulse |
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulse |
-| bring-up heartbeat (temporary) | 31 | 32 | level |
+| **free** (was the bring-up heartbeat) | 31 | 32 | — |
 
 **Level** inputs (buttons/switches/ignition): the already-debounced
 `inputs_get_state()` is mirrored directly onto the bit — no extra logic
@@ -480,10 +480,12 @@ is now the real `INPUT_BUTTON_01`, coming from the MCP23017. The board's
 physical BOOT button still exists only for the gesture that opens the
 WiFi portal (hold for 5s) — that's WiFi logic, untouched.
 
-**Heartbeat (bit 31 / Button 32): kept on purpose.** It should only be
-removed from `main.cpp` once the 31 real controls above are demonstrably
-working on the physical bench (hardware wasn't assembled yet at the time
-of this integration) — an explicit decision, not an oversight.
+**Heartbeat (bit 31 / Button 32): REMOVED.** It existed only to prove the HID
+was alive while the hardware was not assembled. It went away once the 31 real
+controls started responding — a button that fires by itself every second is
+exactly what a game or SimHub binds by mistake during auto-learn. Bit 31 is now
+**free** and is the first slot available for a new control (the descriptor still
+declares 32 buttons).
 
 ### What's left to close this stage's success criterion
 

@@ -192,7 +192,7 @@ modificar código").
 | Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; LED é fiação separada, sem firmware |
 | 4 chaves caça | Estado acompanha a posição da chave | `mcp-test` (GPB4-GPB7) |
 | Múltiplos botões simultâneos | Sem interferência entre bits (não deveria haver — não há matriz) | `inputs-test` (várias entradas ao mesmo tempo, ver o log) |
-| HID no Windows | `joy.cpl` mostra os 31 controles reais + heartbeat no bit 32 | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |
+| HID no Windows | `joy.cpl` mostra os 31 controles reais; o Botão 32 fica parado (heartbeat removido) | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respondem | Qualquer terminal serial na porta COM |
 | SimHub — protocolo | Handshake ARQ + comandos (`'1'` Hello, `'0'` Features, `'4'`/`'6'` fita, `'R'` matriz) respondem certo, RGB chega correto — ver `docs/SIMHUB_PROTOCOL.md` | `simhub-test` + `scripts/simhub_test_send.py` |
 | LEDs (WS2812) | Cores aparecem certas na matriz/fita, sem flicker nem cor trocada (R/G/B) | `ws2812-test` (varredura de cores fixas, sem SimHub) |

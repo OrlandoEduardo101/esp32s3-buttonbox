@@ -39,7 +39,9 @@ build limpo, sem warnings de flags conflitantes.
 - **32 botões**, **4-6 eixos** listados (X, Y, Z, Rotação X/Y/Z, todos parados
   em zero — esperado, ver `ARCHITECTURE.md` item 7).
 - **Botão 32 pisca sozinho** a cada ~1 s (heartbeat de software, sem
-  nenhuma fiação conectada).
+  nenhuma fiação conectada). — **DESATUALIZADO:** o heartbeat foi removido
+  depois que os 31 controles reais passaram a responder; hoje o Botão 32
+  fica parado e livre. Ver `ARCHITECTURE.md` item 9.
 - Evidência: captura de tela do usuário mostrando exatamente esse estado.
 
 ## 3. Botão 1 = BOOT físico — **DESATUALIZADO, não vale mais**

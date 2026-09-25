@@ -24,7 +24,8 @@ with two functions (interfaces), recognized by two different drivers:
   status OK, with **32 buttons** and **4 axes** (X, Y, Z, Z-Rotation, X-Rotation,
   Y-Rotation — 6 axes declared in the descriptor, but `main.cpp` only uses the
   button bitmask; axes always stay at 0). Button 32 blinks on its own
-  (heartbeat).
+  The Button 32 is free — the heartbeat that used to blink on it was removed
+  (see item 9).
 - **COM port (Device Manager → Ports)**: shows up with the same
   product name, assigned by Windows' standard serial driver (`usbser.sys`),
   usable from any serial terminal (VS Code Serial Monitor, PuTTY, etc.) at
@@ -152,20 +153,23 @@ simulated values. **32 buttons** in the descriptor (`uint32_t buttons`, bits
 - **Bits 0–30 (Buttons 1–31)** = the 31 real Button Box controls
   (MCP23017 + 74HC4067 + 4× KY-040), via `lib/inputs`. Full map
   (INPUT LOGICAL ID → bit) in `docs/INPUTS_PINOUT.en.md` section 10.
-- **Bit 31 (Button 32)** = software heartbeat, toggles every 1000 ms —
-  **kept on purpose** until the 31 real controls above are
-  demonstrably working on the physical bench (hardware not yet
-  assembled at the time of this integration); should be removed afterward.
+- **Bit 31 (Button 32)** = **free**. It used to be the bring-up heartbeat,
+  removed as soon as the 31 real controls started responding on the bench. It
+  is the first slot available for a new control.
 
 The old "Bit 0 = board's BOOT button" was removed — it was a
 simulated bring-up value, replaced by the real `INPUT_BUTTON_01` (MCP23017).
 The physical BOOT button still exists only to open the WiFi portal
 (hold for 5s), with no more connection to HID.
 
-## 9. How the button-32 heartbeat works
+## 9. The button-32 heartbeat — removed
 
-In `loop()`, with no dependency on WiFi/OTA/any interrupt:
+**It no longer exists in the firmware.** Throughout bring-up, bit 31 toggled on
+its own every 1 s, purely in software via `millis()`, with no dependency on
+WiFi/OTA/interrupts and no wiring at all:
+
 ```cpp
+// REMOVED — kept here only as a reusable technique
 if (now - lastBeatMs >= 1000) {
   lastBeatMs = now;
   beatOn = !beatOn;
@@ -173,9 +177,17 @@ if (now - lastBeatMs >= 1000) {
   else        buttons &= ~(1UL << 31);
 }
 ```
-Toggles bit 31 (Button 32) every second, purely via software/`millis()`.
-Serves as proof of HID life with no wiring required — it's the first
-test to do on any new board (see `BASELINE.md`).
+
+It was a proof of life for the HID before any hardware existed: if Button 32
+blinked in `joy.cpl`, then USB, the descriptor and report sending were fine, and
+any problem was wiring.
+
+It went away once the 31 real controls started responding. Keeping it would be
+noise: a button that fires by itself every second is exactly the kind of thing a
+game or SimHub binds by mistake during auto-learn.
+
+It is worth pasting the snippet back temporarily when bringing up a **new
+board** — it is the cheapest test there is, and needs nothing soldered.
 
 ## 10. How the CDC is used
 

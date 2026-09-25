@@ -39,7 +39,9 @@ within the partition limits (see above). Re-run during this audit
 - **32 buttons**, **4-6 axes** listed (X, Y, Z, Rotation X/Y/Z, all
   parked at zero — expected, see `ARCHITECTURE.md` item 7).
 - **Button 32 blinks on its own** every ~1 s (software heartbeat, with no
-  wiring connected).
+  wiring connected). — **OUTDATED:** the heartbeat was removed once the 31
+  real controls started responding; Button 32 now sits idle and free. See
+  `ARCHITECTURE.en.md` item 9.
 - Evidence: user-captured screenshot showing exactly this state.
 
 ## 3. Button 1 = physical BOOT — **OUTDATED, no longer applies**

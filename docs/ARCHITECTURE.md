@@ -23,8 +23,8 @@ com duas funções (interfaces), reconhecidas por dois drivers diferentes:
 - **`joy.cpl` (Controladores de jogo)**: aparece como `ESP32S3-SimHub-ButtonBox`,
   status OK, com **32 botões** e **4 eixos** (X, Y, Z, Rotação Z, Rotação X,
   Rotação Y — 6 eixos declarados no descriptor, mas o `main.cpp` só usa o
-  bitmask de botões; eixos ficam sempre em 0). O Botão 32 pisca sozinho
-  (heartbeat).
+  bitmask de botões; eixos ficam sempre em 0). O Botão 32 está livre — o
+  heartbeat que piscava nele foi removido (ver item 9).
 - **Porta COM (Gerenciador de Dispositivos → Portas)**: aparece com o mesmo
   nome de produto, atribuída pelo driver serial padrão do Windows (`usbser.sys`),
   usável em qualquer terminal serial (VS Code Serial Monitor, PuTTY, etc.) a
@@ -152,20 +152,23 @@ valores simulados. **32 botões** no descriptor (`uint32_t buttons`, bits
 - **Bits 0–30 (Botões 1–31)** = os 31 controles reais da Button Box
   (MCP23017 + 74HC4067 + 4× KY-040), via `lib/inputs`. Mapa completo
   (INPUT LOGICAL ID → bit) em `docs/INPUTS_PINOUT.md` seção 10.
-- **Bit 31 (Botão 32)** = heartbeat de software, alterna a cada 1000 ms —
-  **mantido de propósito** até os 31 controles reais acima estarem
-  comprovadamente funcionando na bancada física (hardware ainda não
-  montado no momento desta integração); depois disso deve ser removido.
+- **Bit 31 (Botão 32)** = **livre**. Era o heartbeat de bring-up, removido
+  assim que os 31 controles reais passaram a responder na bancada. É o
+  primeiro slot disponível para um controle novo.
 
 O antigo "Bit 0 = botão BOOT da placa" foi removido — era um valor
 simulado de bring-up, substituído pelo `INPUT_BUTTON_01` real (MCP23017).
 O botão BOOT físico continua existindo só para abrir o portal de WiFi
 (segurar 5s), sem mais nenhuma ligação com o HID.
 
-## 9. Como o heartbeat do botão 32 funciona
+## 9. O heartbeat do botão 32 — removido
 
-Em `loop()`, sem depender de WiFi/OTA/interrupção alguma:
+**Não existe mais no firmware.** Durante todo o bring-up, o bit 31 alternava
+sozinho a cada 1 s, puramente por software/`millis()`, sem depender de
+WiFi/OTA/interrupção nem de fiação nenhuma:
+
 ```cpp
+// REMOVIDO — registrado aqui só como técnica reaproveitável
 if (now - lastBeatMs >= 1000) {
   lastBeatMs = now;
   beatOn = !beatOn;
@@ -173,9 +176,17 @@ if (now - lastBeatMs >= 1000) {
   else        buttons &= ~(1UL << 31);
 }
 ```
-Alterna o bit 31 (Botão 32) a cada 1 segundo, puramente por software/`millis()`.
-Serve como prova de vida do HID sem exigir nenhuma fiação — é o primeiro
-teste a fazer em qualquer placa nova (ver `BASELINE.md`).
+
+Servia de prova de vida do HID antes de existir hardware: se o Botão 32
+piscava no `joy.cpl`, USB, descriptor e envio de report estavam bons, e
+qualquer problema era de fiação.
+
+Saiu quando os 31 controles reais passaram a responder. Mantê-lo viraria
+ruído: um botão que se aciona sozinho a cada segundo é exatamente o tipo de
+coisa que um jogo ou o SimHub bindam por engano num aprendizado automático.
+
+Vale reintroduzir o trecho acima temporariamente ao trazer uma **placa nova**
+— é o teste mais barato que existe, e não precisa de nada soldado.
 
 ## 10. Como a CDC é usada
 

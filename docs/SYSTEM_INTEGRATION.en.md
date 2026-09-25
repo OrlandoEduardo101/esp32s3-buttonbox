@@ -192,7 +192,7 @@ responsible layer before modifying code").
 | Start Engine | Button + LED (if already wired) | `mux-test` (channel C11) for the button; the LED is separate wiring, no firmware involved |
 | 4 toggle switches | State follows the switch's position | `mcp-test` (GPB4-GPB7) |
 | Multiple simultaneous buttons | No interference between bits (shouldn't be any — there's no matrix) | `inputs-test` (several inputs at once, check the log) |
-| HID on Windows | `joy.cpl` shows the 31 real controls + heartbeat on bit 32 | `docs/BASELINE.en.md` (original test) + `docs/INPUTS_PINOUT.en.md` section 10 (bit map) |
+| HID on Windows | `joy.cpl` shows the 31 real controls; Button 32 stays idle (heartbeat removed) | `docs/BASELINE.en.md` (original test) + `docs/INPUTS_PINOUT.en.md` section 10 (bit map) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respond | Any serial terminal on the COM port |
 | SimHub — protocol | ARQ handshake + commands (`'1'` Hello, `'0'` Features, `'4'`/`'6'` strip, `'R'` matrix) respond correctly, RGB arrives correctly — see `docs/SIMHUB_PROTOCOL.en.md` | `simhub-test` + `scripts/simhub_test_send.py` |
 | LEDs (WS2812) | Colors appear correctly on the matrix/strip, no flicker and no swapped channels (R/G/B) | `ws2812-test` (fixed color sweep, no SimHub) |

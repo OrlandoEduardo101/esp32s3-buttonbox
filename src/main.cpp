@@ -12,10 +12,6 @@
 //  4. Economia de energia desligada: com ela o ping de LAN variava de 66 ms a
 //     355 ms, e o OTA corrompia no meio da transferência.
 //
-// Teste sem NENHUMA fiação:
-//   - Botão 32: pisca sozinho a cada 1 s (heartbeat de bring-up, mantido
-//     até os controles reais abaixo estarem comprovadamente funcionando)
-//
 // Botões 1-31: entradas reais da Button Box (MCP23017 + 74HC4067 +
 // encoders), via a camada unificada lib/inputs — mapa completo logo
 // abaixo. O botão BOOT da própria placa (GPIO0) NÃO alimenta mais nenhum
@@ -68,8 +64,8 @@ static void nvsSaveBrightness() {
 // (uint32_t buttons do USBHIDGamepad). Regra unica e verificavel: o bit
 // usado e o proprio valor numerico do InputId (0-30) — o enum ja e 0-based
 // e sequencial, entao nao existe indireção nem tabela separada para
-// desatualizar. Bit 31 fica reservado pro heartbeat de bring-up (ver nota
-// mais abaixo).
+// desatualizar. Bit 31 (Botao 32) fica LIVRE — era do heartbeat de bring-up,
+// removido depois que os 31 controles reais passaram a responder.
 //
 //   INPUT LOGICAL ID                 -> HID BUTTON (bit / Nº no joy.cpl)
 //   INPUT_BUTTON_01                  -> bit 0  / Botao 1
@@ -103,7 +99,7 @@ static void nvsSaveBrightness() {
 //   INPUT_ENCODER_03_CCW             -> bit 28 / Botao 29  [pulso, nao nivel]
 //   INPUT_ENCODER_04_CW              -> bit 29 / Botao 30  [pulso, nao nivel]
 //   INPUT_ENCODER_04_CCW             -> bit 30 / Botao 31  [pulso, nao nivel]
-//   (heartbeat de bring-up, temporario) -> bit 31 / Botao 32
+//   (livre)                          -> bit 31 / Botao 32
 //
 // HID report descriptor NAO foi alterado (continua uint32_t buttons via
 // USBHIDGamepad, 32 bits, sem eixos/hat usados) — os 31 IDs cabem no
@@ -471,24 +467,20 @@ void loop() {
     ws2812_show(ledBuf, total);
   }
 
-  static uint32_t buttons    = 0;
-  static uint32_t lastBeatMs = 0;
-  static bool     beatOn     = false;
-  static uint32_t lastSent   = 0xFFFFFFFFu;
+  static uint32_t buttons  = 0;
+  static uint32_t lastSent = 0xFFFFFFFFu;
 
   const uint32_t now = millis();
 
-  // Heartbeat de bring-up (bit 31 / Botao 32): MANTIDO de proposito, por
-  // pedido explicito desta integracao — so remover quando os 31 controles
-  // reais abaixo estiverem COMPROVADAMENTE funcionando na bancada. Ate lá
-  // continua provando que o HID em si esta vivo, independente do
-  // MCP23017/74HC4067/encoders estarem ou nao fisicamente montados.
-  if (now - lastBeatMs >= 1000) {
-    lastBeatMs = now;
-    beatOn = !beatOn;
-    if (beatOn) buttons |= (1UL << 31);
-    else        buttons &= ~(1UL << 31);
-  }
+  // O heartbeat de bring-up que piscava o Botao 32 a cada 1 s FOI REMOVIDO:
+  // ele existia so pra provar que o HID estava vivo enquanto o hardware nao
+  // estava montado, e ja cumpriu esse papel. Com os 31 controles reais
+  // respondendo, ele virava ruido — um botao "fantasma" que qualquer jogo ou
+  // o SimHub poderia bindar por engano num aprendizado automatico.
+  //
+  // O bit 31 agora fica LIVRE (o descriptor continua com 32 botoes; e o 32o
+  // que deixou de ser usado). E o primeiro slot disponivel se voce adicionar
+  // um controle — ver o orcamento de bits em docs/INPUTS_PINOUT.md secao 9.
 
   // Entradas de nivel (botões, ignição, start, freio, chaves caça): mapa
   // explicito no topo do arquivo — bit = (uint8_t)id. inputs_get_state()

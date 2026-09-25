@@ -457,7 +457,7 @@ comentário no topo de `src/main.cpp`):
 | INPUT_ENCODER_02_CW / _CCW | 25 / 26 | 26 / 27 | pulso |
 | INPUT_ENCODER_03_CW / _CCW | 27 / 28 | 28 / 29 | pulso |
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulso |
-| heartbeat de bring-up (temporário) | 31 | 32 | nível |
+| **livre** (era o heartbeat de bring-up) | 31 | 32 | — |
 
 Entradas de **nível** (botões/switches/ignição): `inputs_get_state()` já
 debounced é espelhado direto no bit — sem lógica extra no `main.cpp`.
@@ -477,10 +477,12 @@ agora é o `INPUT_BUTTON_01` de verdade, vindo do MCP23017. O botão físico
 BOOT da placa continua existindo só para o gesto de abrir o portal de WiFi
 (segurar 5s) — isso é lógica de WiFi, não foi tocado.
 
-**Heartbeat (bit 31 / Botão 32): mantido de propósito.** Só deve ser
-removido do `main.cpp` quando os 31 controles reais acima estiverem
-comprovadamente funcionando na bancada física (hardware ainda não montado
-no momento desta integração) — decisão explícita, não um esquecimento.
+**Heartbeat (bit 31 / Botão 32): REMOVIDO.** Ele existia só para provar que o
+HID estava vivo enquanto o hardware não estava montado. Saiu quando os 31
+controles reais passaram a responder — um botão que se aciona sozinho a cada
+segundo é exatamente o que um jogo ou o SimHub bindam por engano num
+aprendizado automático. O bit 31 agora está **livre** e é o primeiro slot
+disponível para um controle novo (o descriptor continua com 32 botões).
 
 ### O que falta para fechar o critério de sucesso desta etapa
 
