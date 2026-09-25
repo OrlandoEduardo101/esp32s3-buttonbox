@@ -139,12 +139,18 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // HIGH acende. So escreve no pino quando o estado MUDA — nao pelo custo do
 // digitalWrite (e barato), mas pra deixar obvio no codigo que isto e' um
 // nivel estavel, nao algo que pisca.
+// -1 = automatico (segue a ignicao). 0/1 = forcado pelo comando LED, para
+// testar o pino e a fiacao sem depender de chave nenhuma.
+static int8_t g_ledOverride = -1;
+
 static void updateStartEngineLed() {
-  static int8_t lastOn = -1; // -1 = nunca escrito, forca a primeira escrita
-  const bool on = inputs_get_state(INPUT_IGNITION_ON);
-  if ((int8_t)on == lastOn) return;
-  lastOn = (int8_t)on;
-  digitalWrite(BOARD_START_ENGINE_LED_PIN, on ? HIGH : LOW);
+  static int8_t lastWritten = -1; // -1 = nunca escrito, forca a 1a escrita
+  const int8_t want = (g_ledOverride >= 0)
+                          ? g_ledOverride
+                          : (int8_t)(inputs_get_state(INPUT_IGNITION_ON) ? 1 : 0);
+  if (want == lastWritten) return;
+  lastWritten = want;
+  digitalWrite(BOARD_START_ENGINE_LED_PIN, want ? HIGH : LOW);
 }
 
 static void updateEncoderPulses(uint32_t &buttons, uint32_t now) {
@@ -309,6 +315,27 @@ static void serialCommands() {
       if      (strcmp(line, "PING") == 0)    Serial.println("PONG");
       else if (strcmp(line, "VERSION") == 0) Serial.println("ESP32S3_BUTTONBOX_HID_OTA");
       else if (strcmp(line, "IP") == 0)      Serial.println(WiFi.localIP().toString());
+      else if (strcmp(line, "LED") == 0) {
+        // Diagnostico do LED do Start Engine. Mostra o que o FIRMWARE acha,
+        // pra separar "nao aciono o pino" de "o pino aciona e o LED nao
+        // acende" (fiacao/polaridade/LED de 12V).
+        Serial.printf("LED gpio=%u override=%d ignicao_on=%d\n",
+                      (unsigned)BOARD_START_ENGINE_LED_PIN, (int)g_ledOverride,
+                      inputs_get_state(INPUT_IGNITION_ON) ? 1 : 0);
+      }
+      else if (strncmp(line, "LED ", 4) == 0) {
+        // "LED 1" acende, "LED 0" apaga, "LED AUTO" devolve o controle pra
+        // ignicao. Enquanto estiver forcado, a chave nao mexe no LED.
+        const char *arg = line + 4;
+        if (strcmp(arg, "AUTO") == 0) {
+          g_ledOverride = -1;
+          Serial.println("LED_AUTO (voltou a seguir a ignicao)");
+        } else {
+          g_ledOverride = (atoi(arg) != 0) ? 1 : 0;
+          Serial.printf("LED_FORCED %d no gpio %u\n", (int)g_ledOverride,
+                        (unsigned)BOARD_START_ENGINE_LED_PIN);
+        }
+      }
       else if (strcmp(line, "RSSI") == 0) {
         // Diagnostico de link. Existe porque o OTA falhando "no meio" quase
         // nunca e' bug do OTA: ou o sinal esta fraco, ou o power save voltou.
