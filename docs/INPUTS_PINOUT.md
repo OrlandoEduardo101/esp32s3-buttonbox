@@ -583,11 +583,48 @@ na posição 3 (partida) — ver a seção 3.
 
 ### Botão Start Engine (3 terminais) e o LED dele
 
+⚠️ **Meça o botão antes de soldar.** Esses botões de 3 terminais existem em
+duas variantes, e a fiação é diferente em cada uma. O terminal comum é
+compartilhado entre a chave e uma perna do LED — o que muda é *qual* perna.
+
+Use o modo **diodo** do multímetro (não continuidade: vários multímetros
+invertem a polaridade das pontas nesse modo). A ponta vermelha no terminal
+que acende o LED é o ânodo.
+
+**Variante A — comum é o CÁTODO** (fiação padrão, sem resistor extra):
+
 ```
 COM            ──→  GND               (serve pra chave E pro LED)
 Chave (NO)     ──→  C11 do 74HC4067
 LED ânodo (+)  ──→  220 Ω ──→  GPIO2 da ESP32-S3
 ```
+
+`BOARD_MUX_ACTIVE_HIGH_MASK = 0x0000` e
+`BOARD_START_ENGINE_LED_ACTIVE_LOW = false`.
+
+**Variante B — comum é o ÂNODO** (é o botão montado nesta bancada):
+
+```
+COM            ──→  3,3 V             (serve pra chave E pro LED)
+Chave (NO)     ──→  C11 do 74HC4067
+               └──  4,7 kΩ ──→ GND    ← OBRIGATÓRIO
+LED cátodo (−) ──→  220 Ω ──→  GPIO2 da ESP32-S3
+```
+
+`BOARD_MUX_ACTIVE_HIGH_MASK = 0x0800` e
+`BOARD_START_ENGINE_LED_ACTIVE_LOW = true`.
+
+Por que a variante B inverte tudo: a chave precisaria do comum no GND para o
+mux ler active-low, mas com o comum no GND o ânodo fica em 0 V e o LED nunca
+acende — é física, não firmware. Levar o comum para 3,3 V resolve o LED e
+arrasta a chave para active-high junto. O pull-down de 4,7 kΩ passa a ser
+obrigatório: sem ele o pull-up interno da linha SIG domina e o canal lê
+"solto" para sempre.
+
+**Sintomas de estar na variante B com o firmware configurado para a A:** o
+LED fica **sempre aceso** e o Botão 18 fica **sempre acionado**. Se você viu
+exatamente esses dois ao mesmo tempo, a solda está certa e o que falta é
+virar as duas constantes.
 
 Resistor para 3,3 V: `R = (3,3 V − Vf) / I` com `Vf ≈ 2,0 V` (LED vermelho) e
 `I ≈ 6–9 mA` → 220–150 Ω. Mínimo recomendado: 100 Ω.
