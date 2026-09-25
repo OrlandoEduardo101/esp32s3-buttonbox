@@ -150,7 +150,12 @@ static void updateStartEngineLed() {
                           : (int8_t)(inputs_get_state(INPUT_IGNITION_ON) ? 1 : 0);
   if (want == lastWritten) return;
   lastWritten = want;
-  digitalWrite(BOARD_START_ENGINE_LED_PIN, want ? HIGH : LOW);
+  // BOARD_START_ENGINE_LED_ACTIVE_LOW inverte o nivel: com o anodo do LED
+  // amarrado em 3,3 V, quem acende e' o GPIO indo pra LOW.
+  const uint8_t level = BOARD_START_ENGINE_LED_ACTIVE_LOW
+                            ? (want ? LOW : HIGH)
+                            : (want ? HIGH : LOW);
+  digitalWrite(BOARD_START_ENGINE_LED_PIN, level);
 }
 
 static void updateEncoderPulses(uint32_t &buttons, uint32_t now) {
@@ -462,7 +467,8 @@ void setup() {
   // updateStartEngineLed() le inputs_get_state(). Comeca apagado: sem esta
   // linha o GPIO2 fica como entrada flutuante e o LED brilha fraco/oscila.
   pinMode(BOARD_START_ENGINE_LED_PIN, OUTPUT);
-  digitalWrite(BOARD_START_ENGINE_LED_PIN, LOW);
+  digitalWrite(BOARD_START_ENGINE_LED_PIN,
+               BOARD_START_ENGINE_LED_ACTIVE_LOW ? HIGH : LOW); // apagado
   Serial.println("[inputs] MCP23017 + 74HC4067 + encoders inicializados");
 
   // Protocolo Standard Serial do SimHub, sobre a mesma CDC — nao mexe no

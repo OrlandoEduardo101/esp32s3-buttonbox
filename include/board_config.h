@@ -107,7 +107,31 @@ static const uint8_t  BOARD_MUX_CHANNEL_COUNT  = 15; // C0-C14 (docs/INPUTS_PINO
 static const uint8_t BOARD_WS2812_PIN = 1;
 
 // ======================================================================
-// LED do botão Start Engine (saída, HIGH acende). Acompanha a ignição:
+// Canais do 74HC4067 fiados em ACTIVE-HIGH (fecham para 3,3 V, não para GND).
+// Bit N = canal CN. O padrão do projeto é active-low, que é o que o pull-up
+// interno da ESP32 na linha SIG atende sem resistor nenhum.
+//
+// Um canal só entra aqui quando o botão NÃO deixa escolha — o caso concreto
+// é um botão iluminado de 3 terminais cujo COMUM é o ÂNODO do LED (medido
+// com multímetro). Nesse botão, o comum tem que ir para 3,3 V para o LED
+// poder acender, e isso arrasta a chave junto para active-high.
+//
+// ⚠️ Todo canal marcado aqui EXIGE um pull-down externo de 4,7 kΩ do canal
+// para o GND. Sem ele o pull-up interno do SIG domina e o canal lê "solto"
+// para sempre — o firmware não tem como compensar isso.
+//
+// 0x0800 = bit 11 = C11 (Start Engine). Deixe 0x0000 se o seu botão for do
+// tipo comum-cátodo, que é a fiação padrão documentada na seção 11.
+static const uint16_t BOARD_MUX_ACTIVE_HIGH_MASK = 0x0000;
+
+// true  -> o LED acende com o GPIO em LOW (a ESP32 DRENA a corrente; use
+//          quando o comum/ânodo do botão estiver amarrado em 3,3 V).
+// false -> acende com o GPIO em HIGH (a ESP32 FORNECE; comum/cátodo no GND).
+// Anda junto com BOARD_MUX_ACTIVE_HIGH_MASK: se você mudou um, o outro
+// quase certamente também muda.
+static const bool BOARD_START_ENGINE_LED_ACTIVE_LOW = false;
+
+// LED do botão Start Engine (saída). Acompanha a ignição:
 // aceso com INPUT_IGNITION_ON fechado, apagado com a chave em OFF — ver
 // updateStartEngineLed() em src/main.cpp e docs/INPUTS_PINOUT.md secao 6.
 // ======================================================================

@@ -146,8 +146,18 @@ bool readLevel(const InputBinding &b) {
   switch (b.kind) {
     case SourceKind::Mcp23017:
       return input_expander_get_bit(b.index);
-    case SourceKind::Mux4067:
-      return mux4067_get_channel_state(b.index);
+    case SourceKind::Mux4067: {
+      const bool closed = mux4067_get_channel_state(b.index);
+      // Canal active-high (ver BOARD_MUX_ACTIVE_HIGH_MASK): o contato fecha
+      // para 3,3 V, entao o "fechado para GND" que mux4067 reporta vem
+      // trocado. A inversao mora aqui, e nao no driver, porque e' uma
+      // caracteristica da FIACAO deste projeto — o 74HC4067 em si nao tem
+      // opiniao sobre polaridade.
+      if (BOARD_MUX_ACTIVE_HIGH_MASK & (uint16_t)(1u << b.index)) {
+        return !closed;
+      }
+      return closed;
+    }
     case SourceKind::Gpio:
       // Nao usado no mapa atual (nenhum InputId de nivel vem de GPIO
       // direto hoje) — suporte deixado pronto para expansao futura.
