@@ -8,7 +8,10 @@
 //     (segurando BOOT por 5 s) — antes ele abria sozinho a cada falha e a
 //     placa ficava presa em modo AP, offline, sem reconectar nunca mais.
 //  3. WiFi.setSleep(false) só DEPOIS de WiFi.begin(). Chamado antes, ele
-//     inicializa o rádio em STA e impede o AP de subir.
+//     inicializa o rádio em STA e impede o AP de subir. E tem que ser
+//     REAPLICADO a cada reconexão (onWifiConnected) — aplicar uma vez só, no
+//     startOta(), deixava o power save voltar sozinho depois de qualquer
+//     queda de rede.
 //  4. Economia de energia desligada: com ela o ping de LAN variava de 66 ms a
 //     355 ms, e o OTA corrompia no meio da transferência.
 //
@@ -171,9 +174,9 @@ static bool portalAtivo = false;
 static void startOta() {
   if (otaReady) return;
 
-  // Só agora, com o rádio já ativo, é seguro desligar a economia de energia.
-  WiFi.setSleep(false);
-
+  // NAO mexe em WiFi.setSleep() aqui: esta funcao e' guardada por otaReady,
+  // entao roda UMA vez na vida da placa. A economia de energia agora e'
+  // desligada em onWifiConnected(), a cada (re)conexao — ver a nota la.
   ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA
     .onStart([]()              { otaRunning = true;  Serial.println("\n[OTA] iniciando"); })
@@ -188,8 +191,39 @@ static void startOta() {
   MDNS.begin(OTA_HOSTNAME);
 
   otaReady = true;
-  Serial.printf("[WiFi] conectado ip=%s rssi=%d | OTA pronto\n",
-                WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  Serial.println("[OTA] pronto");
+}
+
+// Chamada a cada iteracao do loop; o corpo so roda na BORDA de conexao.
+//
+// Por que existe: WiFi.setSleep(false) estava dentro de startOta(), que tem
+// `if (otaReady) return;` logo na primeira linha — ou seja, era aplicado uma
+// unica vez e nunca mais. Toda reconexao (queda do AP, roaming,
+// setAutoReconnect, ou o WiFi.disconnect()+begin() do wifiKeepAlive) passava
+// a correr o risco de voltar com power save ligado, sem ninguem reaplicar.
+//
+// O sintoma bate com a nota 4 do cabecalho deste arquivo: com economia de
+// energia, o ping de LAN varia muito e o OTA corrompe no meio. Medido em
+// 2026-09-24 com a placa nesse estado: 70% de perda de pacote, ~423 ms de
+// media e respostas ICMP DUPLICADAS — enquanto o mesmo Mac pingava o gateway
+// com 0% de perda. O elo ruim era AP -> ESP32, nao a LAN.
+static void onWifiConnected() {
+  static bool wasConnected = false;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    wasConnected = false; // armado para reaplicar quando voltar
+    return;
+  }
+
+  if (!wasConnected) {
+    wasConnected = true;
+    WiFi.setSleep(false); // <- o ponto: reaplicado a CADA reconexao
+    Serial.printf("[WiFi] conectado ip=%s rssi=%d sleep=%s\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+                  WiFi.getSleep() ? "ON" : "OFF");
+  }
+
+  startOta();
 }
 
 // Reinsiste na rede para sempre. Nunca abre o portal por conta própria.
@@ -255,6 +289,20 @@ static void serialCommands() {
       if      (strcmp(line, "PING") == 0)    Serial.println("PONG");
       else if (strcmp(line, "VERSION") == 0) Serial.println("ESP32S3_BUTTONBOX_HID_OTA");
       else if (strcmp(line, "IP") == 0)      Serial.println(WiFi.localIP().toString());
+      else if (strcmp(line, "RSSI") == 0) {
+        // Diagnostico de link. Existe porque o OTA falhando "no meio" quase
+        // nunca e' bug do OTA: ou o sinal esta fraco, ou o power save voltou.
+        // Leitura de RSSI: -50 otimo, -67 e' o piso pratico pra transferencia
+        // confiavel, -75 pra baixo o OTA vai quebrar. sleep=ON com OTA
+        // instavel e' bug de firmware, nao de rede.
+        if (WiFi.status() != WL_CONNECTED) {
+          Serial.println("RSSI_OFFLINE");
+        } else {
+          Serial.printf("RSSI %d dBm sleep=%s ip=%s\n", WiFi.RSSI(),
+                        WiFi.getSleep() ? "ON" : "OFF",
+                        WiFi.localIP().toString().c_str());
+        }
+      }
       else if (strncmp(line, "SETLEDS ", 8) == 0) {
         // Quantos LEDs tem a FITA (a matriz e' fixa em 8x8 = 64 pelo
         // proprio protocolo do SimHub). Persiste em NVS, sobrevive a
@@ -389,7 +437,7 @@ void setup() {
 
 void loop() {
   if (portalAtivo) wm.process();
-  if (WiFi.status() == WL_CONNECTED) startOta();
+  onWifiConnected(); // reaplica setSleep(false) e sobe o OTA na (re)conexao
   if (otaReady) ArduinoOTA.handle();
 
   // Durante a atualizacao NADA mais roda: qualquer escrita na serial pode

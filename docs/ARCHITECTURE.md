@@ -198,6 +198,11 @@ linha-a-linha, processado em `serialCommands()`:
 | `PING`       | responde `PONG`                                                |
 | `VERSION`    | responde `ESP32S3_BUTTONBOX_HID_OTA`                            |
 | `IP`         | responde o IP atual (`WiFi.localIP()`)                          |
+| `RSSI`       | responde `RSSI <dBm> sleep=<ON\|OFF> ip=<ip>`, ou `RSSI_OFFLINE`. Diagnóstico de link: `-50` ótimo, `-67` é o piso prático para OTA confiável, `-75` pra baixo o OTA quebra. `sleep=ON` com OTA instável é bug de firmware, não de rede |
+| `SETLEDS <n>`| define a quantidade de LEDs **da fita** (1-192, padrão 10; a matriz é fixa em 64). Persiste em NVS. Responde `LEDS_SET <n>` ou `LEDS_INVALID (1-192)` |
+| `BRIGHTNESS` | responde `BRIGHTNESS_GET <n>%` (só consulta)                     |
+| `BRIGHTNESS <n>` | limita o brilho global dos LEDs. Grampeado em 25-75%, então `BRIGHTNESS 10` responde `BRIGHTNESS_SET 25%` sem erro; só recusa fora de 1-100. Persiste em NVS |
+| `DUMPLEDS`   | imprime o que chegou do SimHub (matriz e fita) sem precisar dos LEDs físicos acesos |
 | `BOOTLOADER` | responde `REBOOTING_TO_BOOTLOADER`, depois entra em modo download via `usb_persist_restart(RESTART_BOOTLOADER)` — ver item 15 sobre por que **não** é mais um `REG_WRITE` direto |
 
 Também emite logs periódicos não-solicitados (`statusReport()`, a cada 5 s):
