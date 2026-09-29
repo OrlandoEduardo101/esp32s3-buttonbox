@@ -7,11 +7,12 @@
 // USB em modo Serial-JTAG (ARDUINO_USB_MODE=1, ver [env:mux-test] no
 // platformio.ini), mesmo padrão de diag.cpp/mcp_test.cpp.
 //
-// Fiação esperada (docs/INPUTS_PINOUT.md secao 4):
-//   S0=GPIO15 S1=GPIO16 S2=GPIO17 S3=GPIO18 SIG=GPIO21
-//   C0-C8 em uso (mapa aprovado, secao 3); C9-C15 livres — por isso este
-//   teste varre só 9 canais (channelCount=9), demonstrando que o driver
-//   não exige os 16.
+// Fiação esperada (docs/INPUTS_PINOUT.md secao 3-4, revisão 2):
+//   S0=GPIO4 S1=GPIO5 S2=GPIO6 S3=GPIO7 SIG=GPIO10 (ver board_config.h)
+//   C0-C14 todos em uso (11 push buttons + Start Engine + ignição ON/IGN +
+//   freio de estacionamento) — por isso este teste varre 15 canais
+//   (channelCount=BOARD_MUX_CHANNEL_COUNT), não os 16 do chip; C15 fica
+//   livre para expansão futura.
 #include <Arduino.h>
 #include "mux4067.h"
 #include "board_config.h" // pinos e numero de canais — mapa unico do projeto
@@ -71,8 +72,8 @@ void setup() {
   mux4067_init(BOARD_MUX_S0_PIN, BOARD_MUX_S1_PIN, BOARD_MUX_S2_PIN,
                BOARD_MUX_S3_PIN, BOARD_MUX_SIG_PIN, CHANNEL_COUNT);
 
-  Serial.println("Mapa de canais varridos (C9-C15 ficam de fora de "
-                  "propósito, sao livres/nao fiados ainda):");
+  Serial.println("Mapa de canais varridos (C0-C14, todos em uso; C15 fica "
+                  "de fora, livre para expansão futura):");
   for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
     Serial.printf("  canal %2u = %s\n", i, CHANNEL_LABEL[i]);
   }

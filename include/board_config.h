@@ -15,19 +15,20 @@
 // decide quais valores passar pra cada um.
 //
 // ======================================================================
-// REVISÃO 2 (set/2026) — "tudo abaixo do GPIO14"
+// REVISÃO 2 (set/2026) — "só até o GPIO13"
 // ======================================================================
-// A ESP32-S3 SuperMini só expõe em header os GPIO 0-14. Do 15 em diante
-// (15-18, 21, 33-48) os sinais existem no módulo, mas saem em PADS na
-// FACE INFERIOR da placa — soldáveis, porém sob o corpo da placa, o que
-// inviabiliza montagem manual decente. A revisão 1 deste mapa colocava as
-// 5 linhas do 74HC4067 (S0-S3 + SIG) justamente em 15/16/17/18/21.
+// A ESP32-S3 SuperMini só expõe em header de fácil acesso os GPIO 0-13. Do
+// GPIO14 em diante (14-18, 21, 33-48) os sinais existem no módulo, mas
+// saem em PADS na FACE INFERIOR da placa — soldáveis, porém sob o corpo da
+// placa, o que inviabiliza montagem manual decente (isto inclui o próprio
+// GPIO14, não só 15 pra cima). A revisão 1 deste mapa colocava as 5 linhas
+// do 74HC4067 (S0-S3 + SIG) justamente em 15/16/17/18/21.
 //
 // Solução adotada (opção B, escolhida pelo usuário): os 8 sinais de
 // quadratura dos 4 encoders SAEM do GPIO direto e passam para o banco A
 // do MCP23017, liberando 8 pinos de header; o 74HC4067 assume as linhas
-// de botão e ocupa 5 desses pinos livres. Resultado: **nenhum pino acima
-// do GPIO14**, e ainda sobram 11/12/13 livres.
+// de botão e ocupa 5 desses pinos livres. Resultado: **nenhum pino usado
+// vai além do GPIO13**, e ainda sobram 11/12/13 livres.
 //
 // Consequência técnica que NÃO pode ser esquecida: quadratura por I2C não
 // tem interrupção por borda, então a amostragem passou a ser feita por uma

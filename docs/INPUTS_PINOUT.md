@@ -19,14 +19,15 @@
 > **Revisão 2 (set/2026) — o pinout mudou.** A revisão 1 punha os 8 sinais
 > de quadratura em GPIO direto e as 5 linhas do 74HC4067 nos GPIO 15, 16,
 > 17, 18 e 21. Na **ESP32-S3 SuperMini** esses cinco não existem como pino
-> de header: saem em pads na face inferior do módulo, sob o corpo da placa,
-> o que torna a solda manual impraticável. Tudo do GPIO15 pra cima é assim.
+> de fácil acesso: saem em pads na face inferior do módulo, sob o corpo da
+> placa, o que torna a solda manual impraticável. Isso vale para **todo
+> GPIO a partir do 14** (o próprio 14 incluído, não só 15 pra cima).
 >
 > **Decisão (opção B, escolhida pelo usuário):** os encoders migram para o
 > **banco A do MCP23017** e o 74HC4067 assume as linhas de botão, ocupando
 > os pinos de header que os encoders liberaram. Resultado: **nenhum sinal
-> acima do GPIO14**, e ainda sobram GPIO 11, 12 e 13 livres. Os dois CIs são
-> os mesmos de antes — nenhuma peça nova.
+> usa GPIO14 ou acima**, e ainda sobram GPIO 11, 12 e 13 livres. Os dois CIs
+> são os mesmos de antes — nenhuma peça nova.
 
 - **MCP23017 (I2C)**: leva os 8 sinais **CLK/DT dos 4 encoders** (banco A) e,
   no banco B, o **SW de cada encoder** + as **4 chaves tipo caça**. Os SW
@@ -65,9 +66,11 @@ Depois que essa task sobe, **ela é a única dona do I2C**: `inputs_update()`,
 no loop, só lê o cache que ela mantém. Não chame `input_expander_update()`
 de nenhum outro lugar.
 
-O pino **INT do MCP23017 está reservado no GPIO14** e vale a pena fiar desde
-já, mesmo sem uso: se um dia a amostragem virar orientada a evento, é só
-ligar `GPINTEN` no chip e um `attachInterrupt` — sem refazer a placa.
+O pino **INT do MCP23017 não é fiado** (deixe INTA/INTB sem conexão — ver
+seção 4 para o porquê: uma revisão anterior reservava o GPIO14 para ele, e
+esse pino é justamente um pad da face inferior nesta placa). Se um dia a
+amostragem virar orientada a evento, escolha então um GPIO de header livre
+na época; não volte a reservar o GPIO14.
 
 - Ambos os expansores ficam com folga (nenhum canal livre no MCP, 1 canal
   livre no mux, e 3 GPIO de header livres) para expansão futura.
@@ -266,9 +269,9 @@ Pinos deliberadamente **evitados** nesta alocação:
   boot/tensão da flash); GPIO46 além disso é *input-only*.
 - **GPIO19, GPIO20** — USB nativo (D-/D+), em uso pelo HID/CDC. Nunca usar
   como GPIO neste projeto.
-- **GPIO15-18, GPIO21 e tudo de GPIO33 pra cima** — existem no chip, mas na
-  SuperMini saem em pads na face inferior. É a restrição que motivou esta
-  revisão; não voltar a usá-los sem trocar de placa.
+- **GPIO14** e **GPIO15-18, GPIO21 e tudo de GPIO33 pra cima** — existem no
+  chip, mas na SuperMini saem em pads na face inferior. É a restrição que
+  motivou esta revisão; não voltar a usá-los sem trocar de placa.
 - **GPIO26-GPIO32** — barramento interno para a flash/PSRAM em pacote
   (SPI0/1). Não existem como GPIO utilizável nesta placa.
 - **GPIO43, GPIO44** — UART0 TX/RX (default). Livres no uso atual (o projeto
@@ -286,7 +289,7 @@ Pinos deliberadamente **evitados** nesta alocação:
 | GPIO12 | **Livre em header** |
 | GPIO13 | **Livre em header** |
 | GPIO3 | Existe em header, mas é strapping — evitar até ter motivo |
-| GPIO15-18, 21, 33-48 | Existem no chip; na SuperMini são pads da face inferior. Tratar como indisponíveis |
+| GPIO14-18, 21, 33-48 | Existem no chip; na SuperMini são pads da face inferior. Tratar como indisponíveis |
 
 Três pinos de header livres, mais o canal C15 do mux, mais a possibilidade
 de um segundo MCP23017 no mesmo I2C (16 entradas a custo zero de pino). Isso

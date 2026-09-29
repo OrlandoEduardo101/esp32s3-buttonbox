@@ -189,7 +189,7 @@ responsible layer before modifying code").
 | 4 encoders — CW/CCW | Each physical detent produces exactly 1 event in the right direction | `encoder-test` (quadrature in isolation, reading GPA0-GPA7 from the MCP23017). A missing detent points at the sampling period / I2C, not at the decoder — see `docs/INPUTS_PINOUT.en.md`, "The price of this trade" |
 | Parking brake | State follows the lever's position | `mux-test` (channel C14) |
 | Ignition (3 positions) | ON and IGN correct, IGN only during cranking (see `docs/INPUTS_PINOUT.en.md` section 3) | `mux-test` (channels C12/C13) |
-| Start Engine | Button + LED (if already wired) | `mux-test` (channel C11) for the button; the LED is separate wiring, no firmware involved |
+| Start Engine | Button + LED (if already wired) | `mux-test` (channel C11) for the button; the LED is firmware-controlled (`updateStartEngineLed()` in `src/main.cpp`), follows `INPUT_IGNITION_ON` — testable directly over serial with `LED 1`/`LED 0`/`LED AUTO`, see `docs/ARCHITECTURE.en.md` section 10 |
 | 4 toggle switches | State follows the switch's position | `mcp-test` (GPB4-GPB7) |
 | Multiple simultaneous buttons | No interference between bits (shouldn't be any — there's no matrix) | `inputs-test` (several inputs at once, check the log) |
 | HID on Windows | `joy.cpl` shows the 31 real controls; Button 32 stays idle (heartbeat removed) | `docs/BASELINE.en.md` (original test) + `docs/INPUTS_PINOUT.en.md` section 10 (bit map) |

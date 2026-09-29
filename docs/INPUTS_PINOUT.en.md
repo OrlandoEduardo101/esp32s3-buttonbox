@@ -19,15 +19,16 @@
 > **Revision 2 (Sep 2026) — the pinout changed.** Revision 1 put the 8
 > quadrature signals on direct GPIO and the five 74HC4067 control lines on
 > GPIO 15, 16, 17, 18 and 21. On the **ESP32-S3 SuperMini** those five are
-> not header pins: they come out as pads on the underside of the module,
-> beneath the board body, which makes hand soldering impractical. Everything
-> from GPIO15 up is like that.
+> not easily-accessible pins: they come out as pads on the underside of the
+> module, beneath the board body, which makes hand soldering impractical.
+> That applies to **every GPIO from 14 up** (14 itself included, not just
+> 15 and above).
 >
 > **Decision (option B, chosen by the user):** the encoders move to the
 > **MCP23017 port A** and the 74HC4067 takes over the button lines, using the
-> header pins the encoders freed. Result: **no signal above GPIO14**, with
-> GPIO 11, 12 and 13 still spare. Both ICs are the same as before — no new
-> parts.
+> header pins the encoders freed. Result: **no signal uses GPIO14 or above**,
+> with GPIO 11, 12 and 13 still spare. Both ICs are the same as before — no
+> new parts.
 
 - **MCP23017 (I2C)**: carries the 8 **CLK/DT encoder signals** (port A) and,
   on port B, each **encoder's SW** plus the **4 toggle switches**. The SW
@@ -66,9 +67,11 @@ Once that task is up, **it owns I2C exclusively**: `inputs_update()`, in the
 loop, only reads the cache it maintains. Do not call
 `input_expander_update()` from anywhere else.
 
-The **MCP23017 INT pin is reserved on GPIO14** and is worth wiring now even
-though it is unused: if sampling ever becomes event-driven, it is just
-`GPINTEN` on the chip plus an `attachInterrupt` — no board respin.
+The **MCP23017 INT pin is not wired** (leave INTA/INTB unconnected — see
+section 4 for why: an earlier revision reserved GPIO14 for it, and that pin
+is precisely an underside pad on this board). If sampling ever becomes
+event-driven, pick a free header GPIO at that time; do not reserve GPIO14
+again.
 
 - Both expanders keep some headroom (no free MCP pin, 1 free mux channel and
   3 free header GPIOs) for future expansion.
@@ -264,9 +267,10 @@ Pins deliberately **avoided** in this allocation:
   voltage); GPIO46 is also *input-only*.
 - **GPIO19, GPIO20** — native USB (D-/D+), in use by HID/CDC. Never use as GPIO
   in this project.
-- **GPIO15-18, GPIO21 and everything from GPIO33 up** — they exist on the chip,
-  but on the SuperMini they come out as underside pads. This is the constraint
-  that drove this revision; do not go back to them without changing boards.
+- **GPIO14**, and **GPIO15-18, GPIO21 and everything from GPIO33 up** — they
+  exist on the chip, but on the SuperMini they come out as underside pads.
+  This is the constraint that drove this revision; do not go back to them
+  without changing boards.
 - **GPIO26-GPIO32** — internal bus to the in-package flash/PSRAM (SPI0/1). Not
   usable as GPIO on this board.
 - **GPIO43, GPIO44** — UART0 TX/RX (default). Free in current use (the project
@@ -284,7 +288,7 @@ Pins deliberately **avoided** in this allocation:
 | GPIO12 | **Free on header** |
 | GPIO13 | **Free on header** |
 | GPIO3 | Present on header, but it is a strapping pin — avoid without a reason |
-| GPIO15-18, 21, 33-48 | Present on the chip; on the SuperMini they are underside pads. Treat as unavailable |
+| GPIO14-18, 21, 33-48 | Present on the chip; on the SuperMini they are underside pads. Treat as unavailable |
 
 Three free header pins, plus mux channel C15, plus the option of a second
 MCP23017 on the same I2C (16 inputs at zero pin cost). That comfortably covers

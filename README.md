@@ -51,9 +51,9 @@ Um button box completo, do hardware ao firmware, com duas partes:
 | Componente | Função |
 |---|---|
 | ESP32-S3 (qualquer variante com USB-OTG nativo) | MCU — HID, WiFi, OTA, protocolo SimHub |
-| MCP23017 (I2C) | 11 push buttons, ignição (3 posições), botão Start Engine |
-| 74HC4067 (mux 16 canais) | SW dos 4 encoders, 4 chaves "caça", freio de estacionamento |
-| 4× encoder KY-040 | CLK/DT direto na MCU (quadratura por interrupção); SW pelo mux |
+| MCP23017 (I2C) | CLK/DT dos 4 encoders (quadratura, amostrada 1 kHz), SW dos 4 encoders, 4 chaves "caça" |
+| 74HC4067 (mux 16 canais) | 11 push buttons, ignição (3 posições), botão Start Engine, freio de estacionamento |
+| 4× encoder KY-040 | CLK/DT e SW pelo MCP23017 (nenhum fio direto na MCU) |
 | Matriz WS2812 8x8 (64 LEDs) | RGB Matrix do SimHub — ex.: iFlag |
 | Fita WS2812 (~10 LEDs, configurável) | RGB Leds do SimHub — ex.: RPM |
 
@@ -124,14 +124,12 @@ e só usa um valor default próprio se você não passar nada.
         ▼
       INPUTS
         │
-   ┌────┴─────────────┐
-   │                  │
-ESP32 GPIO        Expansores
-(encoders)     ┌────┴────┐
-               │         │
-           MCP23017   74HC4067
-               │         │
-               └─────────┴── controles físicos
+   Expansores (task dedicada faz o polling)
+   ┌────┴────┐
+   │         │
+MCP23017   74HC4067
+   │         │
+   └─────────┴── controles físicos
 ```
 
 Cada seta é uma camada independente — nenhuma conhece a lógica da outra

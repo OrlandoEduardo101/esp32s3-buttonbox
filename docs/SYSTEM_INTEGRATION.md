@@ -189,7 +189,7 @@ modificar código").
 | 4 encoders — CW/CCW | Cada detent físico gera exatamente 1 evento no sentido certo | `encoder-test` (quadratura isolada, lendo GPA0-GPA7 do MCP23017). Detent faltando aponta para o período de amostragem / I2C, não para o decoder — ver `docs/INPUTS_PINOUT.md` seção "O preço dessa troca" |
 | Freio de estacionamento | Estado acompanha a posição da alavanca | `mux-test` (canal C14) |
 | Ignição (3 posições) | ON e IGN corretos, IGN só durante o crank (ver `docs/INPUTS_PINOUT.md` seção 3) | `mux-test` (canais C12/C13) |
-| Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; LED é fiação separada, sem firmware |
+| Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; o LED é controlado pelo firmware (`updateStartEngineLed()` em `src/main.cpp`), acompanha `INPUT_IGNITION_ON` — testável direto pela serial com `LED 1`/`LED 0`/`LED AUTO`, ver `docs/ARCHITECTURE.md` seção 10 |
 | 4 chaves caça | Estado acompanha a posição da chave | `mcp-test` (GPB4-GPB7) |
 | Múltiplos botões simultâneos | Sem interferência entre bits (não deveria haver — não há matriz) | `inputs-test` (várias entradas ao mesmo tempo, ver o log) |
 | HID no Windows | `joy.cpl` mostra os 31 controles reais; o Botão 32 fica parado (heartbeat removido) | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |

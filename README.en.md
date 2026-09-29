@@ -50,9 +50,9 @@ A complete button box, from electronics to firmware, in two parts:
 | Component | Role |
 |---|---|
 | ESP32-S3 (any variant with native USB-OTG) | MCU — HID, WiFi, OTA, SimHub protocol |
-| MCP23017 (I2C) | 11 push buttons, 3-position ignition key, Start Engine button |
-| 74HC4067 (16-channel mux) | Encoder SW switches, 4 toggle switches, parking brake |
-| 4× KY-040 encoder | CLK/DT wired directly to the MCU (interrupt-driven quadrature); SW through the mux |
+| MCP23017 (I2C) | CLK/DT of the 4 encoders (quadrature, sampled at 1 kHz), encoder SW switches, 4 toggle switches |
+| 74HC4067 (16-channel mux) | 11 push buttons, 3-position ignition key, Start Engine button, parking brake |
+| 4× KY-040 encoder | CLK/DT and SW both through the MCP23017 (no direct wiring to the MCU) |
 | WS2812 8x8 matrix (64 LEDs) | SimHub's RGB Matrix — e.g. iFlag |
 | WS2812 strip (~10 LEDs, configurable) | SimHub's RGB Leds — e.g. RPM |
 
@@ -123,14 +123,12 @@ to its own default when you don't pass anything.
         ▼
       INPUTS
         │
-   ┌────┴─────────────┐
-   │                  │
-ESP32 GPIO         Expanders
-(encoders)     ┌────┴────┐
-               │         │
-           MCP23017   74HC4067
-               │         │
-               └─────────┴── physical controls
+   Expanders (a dedicated task does the polling)
+   ┌────┴────┐
+   │         │
+MCP23017   74HC4067
+   │         │
+   └─────────┴── physical controls
 ```
 
 Every arrow is an independent layer — none of them know the others'
