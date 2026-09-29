@@ -541,6 +541,23 @@ internal pull-ups.
 > MCP23017, and SDA/SCL carries the quadrature. Keep the MCP23017 close to the
 > ESP32 (short I2C) and run the long wires to the encoders, not to the bus.
 
+### ⚠️ 74HC4067 EN pin — must be wired to GND
+
+The 74HC4067 has an **EN** pin (also labelled `/E` or `~E`, active LOW).
+When EN is `HIGH` — including floating with no connection — the chip
+**disables every channel at once**: SIG disconnects from all inputs, floats
+HIGH through the ESP32 pull-up, and the firmware reads "no button pressed"
+(or chaotic intermittent behaviour if the pin drifts).
+
+**EN goes directly to GND.** No GPIO, no resistor — just a short wire from
+EN to the GND rail. Without it, any noise on that pin kills the whole chip
+and looks exactly like a bad contact on the buttons or on S0–S3.
+
+> Some 74HC4067 breakout boards already ground EN internally — check your
+> board's schematic before soldering. If it doesn't, add the wire.
+
+---
+
 ### Push buttons 1–11, Start Engine, Ignition, parking brake (74HC4067)
 
 Bare switches (two terminals). The firmware enables the ESP32 internal pull-up

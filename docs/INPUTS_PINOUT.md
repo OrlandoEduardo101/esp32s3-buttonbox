@@ -537,6 +537,23 @@ resistor nenhum**, porque o firmware liga pull-ups internos.
 > MCP23017 perto da ESP32 (I2C curto) e leve os fios longos para os
 > encoders, não para o barramento.
 
+### ⚠️ Pino EN do 74HC4067 — obrigatório no GND
+
+O 74HC4067 tem um pino **EN** (também chamado `/E` ou `~E`, ativo em LOW).
+Quando EN está em `HIGH` — inclusive flutuando sem ligação — o chip
+**desliga todos os canais ao mesmo tempo**: SIG fica desconectado de tudo,
+vai pro pull-up da ESP32 e o firmware lê "nenhum botão pressionado" (ou
+comportamento caótico intermitente se o pino flutuar).
+
+**EN deve ir direto para o GND.** Nenhum pino de GPIO, nenhum resistor —
+só um fio curto de EN ao trilho de GND. Sem isso, qualquer ruído no pino
+desativa o chip inteiro e parece mau contato nos botões ou nos seletores S0-S3.
+
+> Alguns módulos breakout do 74HC4067 já aterram o EN internamente — confira
+> o esquemático da sua placa antes de soldar. Se não tiver, adicione o fio.
+
+---
+
 ### Push buttons 1–11, Start Engine, Ignição, freio (74HC4067)
 
 Chaves "nuas" (dois terminais). O firmware liga o pull-up interno da ESP32 na
