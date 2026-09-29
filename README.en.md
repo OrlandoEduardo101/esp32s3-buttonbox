@@ -54,7 +54,7 @@ A complete button box, from electronics to firmware, in two parts:
 | 74HC4067 (16-channel mux) | 11 push buttons, 3-position ignition key, Start Engine button, parking brake |
 | 4× KY-040 encoder | CLK/DT and SW both through the MCP23017 (no direct wiring to the MCU) |
 | WS2812 8x8 matrix (64 LEDs) | SimHub's RGB Matrix — e.g. iFlag |
-| WS2812 strip (~10 LEDs, configurable) | SimHub's RGB Leds — e.g. RPM |
+| WS2812 strip (~12 LEDs, configurable) | SimHub's RGB Leds — e.g. RPM |
 
 ## 3D-printed case
 

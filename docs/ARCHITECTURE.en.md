@@ -200,7 +200,7 @@ processed in `serialCommands()`:
 | `VERSION`    | replies `ESP32S3_BUTTONBOX_HID_OTA`                               |
 | `IP`         | replies with the current IP (`WiFi.localIP()`)                    |
 | `RSSI`       | replies `RSSI <dBm> sleep=<ON\|OFF> ip=<ip>`, or `RSSI_OFFLINE`. Link diagnostic: `-50` great, `-67` is the practical floor for reliable OTA, below `-75` OTA breaks. `sleep=ON` together with a flaky OTA is a firmware bug, not a network one |
-| `SETLEDS <n>`| sets the number of LEDs on the **strip** (1-192, default 10; the matrix is fixed at 64). Persisted in NVS. Replies `LEDS_SET <n>` or `LEDS_INVALID (1-192)` |
+| `SETLEDS <n>`| sets the number of LEDs on the **strip** (1-192, default 12; the matrix is fixed at 64). Persisted in NVS. Replies `LEDS_SET <n>` or `LEDS_INVALID (1-192)` |
 | `BRIGHTNESS` | replies `BRIGHTNESS_GET <n>%` (query only) |
 | `BRIGHTNESS <n>` | caps global LED brightness. Clamped to 25-75%, so `BRIGHTNESS 10` replies `BRIGHTNESS_SET 25%` without an error; it only rejects outside 1-100. Persisted in NVS |
 | `DUMPLEDS`   | prints what arrived from SimHub (matrix and strip) without needing the physical LEDs lit |

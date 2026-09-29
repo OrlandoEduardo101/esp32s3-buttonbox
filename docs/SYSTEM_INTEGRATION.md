@@ -49,7 +49,7 @@ anteriores e não foi reescrito, só verificado.
 
 ## Novo nesta etapa
 
-- **`lib/ws2812/`** — driver de saída para a matriz 8x8 + fita (~10 LEDs),
+- **`lib/ws2812/`** — driver de saída para a matriz 8x8 + fita (~12 LEDs),
   via periférico RMT da ESP32-S3 (`rmtInit`/`rmtWrite`, mesmo timing de
   bit já usado e validado pela Espressif em `neopixelWrite()` do core,
   generalizado de 1 pixel para N). Não bloqueia — `rmtWrite()` é

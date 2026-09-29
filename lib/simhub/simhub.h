@@ -61,7 +61,7 @@ static const uint16_t SIMHUB_MATRIX_LED_COUNT = 64;
 
 // Fita: quantidade configurável em runtime (NVS), comando serial
 // "SETLEDS <n>". O SimHub lê esse valor pelo comando '4'.
-static const uint16_t SIMHUB_STRIP_COUNT_DEFAULT = 10;
+static const uint16_t SIMHUB_STRIP_COUNT_DEFAULT = 12;
 static const uint16_t SIMHUB_STRIP_COUNT_MAX     = 192; // teto do buffer interno
 
 // Char de versão devolvido no Hello — mesmo valor das implementações de
