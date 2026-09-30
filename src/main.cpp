@@ -274,6 +274,29 @@ static void watchInputs() {
   }
 }
 
+// Diagnostico MATRIXWALK: acende UM pixel FISICO (indice cru da cadeia,
+// 0-63, SEM passar pelo remapeamento BOARD_MATRIX_MIRROR_X/SERPENTINE) de
+// cada vez, avançando sozinho a cada ~800ms e imprimindo o indice no
+// serial. Existe porque adivinhar o remapeamento certo olhando caracteres
+// (“2 ficou certo mas 3 virou 5”) não converge — dá resultado parcial e
+// inconsistente. Testando o indice cru direto, dá pra descobrir o layout
+// real da fiação com poucos pontos: onde phys=0 acende (qual canto),
+// para que lado phys 0->7 anda, e onde phys=8 acende em relação ao 7
+// (mesma fiada, direção oposta = serpentina; fiada de baixo, mesma ponta =
+// reta). Com isso da pra calcular o remapeamento certo sem mais tentativa
+// e erro. -1 = desligado (comportamento normal, SimHub/idle no controle).
+static int16_t g_matrixWalkPhys = -1;
+
+static void updateMatrixWalk() {
+  if (g_matrixWalkPhys < 0) return;
+  static uint32_t lastStep = 0;
+  const uint32_t now = millis();
+  if (now - lastStep < 800) return;
+  lastStep = now;
+  Serial.printf("[matrixwalk] phys=%d\n", (int)g_matrixWalkPhys);
+  g_matrixWalkPhys = (g_matrixWalkPhys + 1) % (int16_t)SIMHUB_MATRIX_LED_COUNT;
+}
+
 // -1 = automatico (segue a ignicao). 0/1 = forcado pelo comando LED, para
 // testar o pino e a fiacao sem depender de chave nenhuma.
 static int8_t g_ledOverride = -1;
@@ -558,6 +581,21 @@ static void serialCommands() {
         // Sem argumento: so consulta o valor atual, sem alterar nem gravar.
         Serial.printf("BRIGHTNESS_GET %u%%\n", (unsigned)ws2812_get_brightness());
       }
+      else if (strcmp(line, "MATRIXWALK") == 0) {
+        // Liga/desliga o diagnostico de fiacao da matriz — ver o
+        // comentario de g_matrixWalkPhys mais acima pra como usar o
+        // resultado. Enquanto ligado, ignora SimHub/idle na matriz (a
+        // fita continua normal).
+        if (g_matrixWalkPhys < 0) {
+          g_matrixWalkPhys = 0;
+          Serial.println("MATRIXWALK_ON — um pixel fisico por vez, ~800ms; "
+                          "veja em qual posicao real cada indice acende");
+          Serial.println("[matrixwalk] phys=0");
+        } else {
+          g_matrixWalkPhys = -1;
+          Serial.println("MATRIXWALK_OFF");
+        }
+      }
       else if (strcmp(line, "BOOTLOADER") == 0) {
         // Entra em modo download por software, dispensando segurar o botao
         // BOOT. Com ARDUINO_USB_MODE=0 o USB-Serial-JTAG some, e o esptool
@@ -671,6 +709,8 @@ void loop() {
   inputs_update(); // MCP23017 + 74HC4067 + 4x KY-040 — nao bloqueia (lib/inputs)
   simhub_update(); // so verifica timeout de conexao — nao le Serial, nao bloqueia
 
+  updateMatrixWalk(); // so faz algo com MATRIXWALK ligado; ve comentario acima
+
   // Ponte SimHub -> WS2812: o UNICO lugar do firmware que conhece os dois
   // ao mesmo tempo (nem lib/simhub nem lib/ws2812 se conhecem — regra 9 da
   // arquitetura). Reenvia o framebuffer inteiro a cada iteracao do loop;
@@ -701,20 +741,30 @@ void loop() {
       led_idle_render(millis(), idleMatrix, idleStrip, stripCount);
     }
 
-    // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
-    // Duas correcoes de fiacao independentes, configuraveis em
-    // board_config.h — ver o comentario la pra o que cada uma resolve.
-    for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
-      const uint16_t y = i / 8;
-      uint16_t x = i % 8;
-      if (BOARD_MATRIX_MIRROR_X) x = 7 - x;
-      if (BOARD_MATRIX_SERPENTINE && (y % 2) == 0) x = 7 - x;
-      const uint16_t phys = y * 8 + x;
-      if (idle) {
-        ledBuf[phys] = {idleMatrix[i].r, idleMatrix[i].g, idleMatrix[i].b};
-      } else {
-        const SimhubColor c = simhub_get_matrix_led(i);
-        ledBuf[phys] = {c.r, c.g, c.b};
+    if (g_matrixWalkPhys >= 0) {
+      // MATRIXWALK ativo: ignora SimHub/idle, acende só o indice FISICO
+      // cru corrente, sem nenhum remapeamento — ver comentario de
+      // g_matrixWalkPhys.
+      for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
+        ledBuf[i] = (i == (uint16_t)g_matrixWalkPhys) ? Ws2812Color{255, 255, 255}
+                                                       : Ws2812Color{0, 0, 0};
+      }
+    } else {
+      // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
+      // Duas correcoes de fiacao independentes, configuraveis em
+      // board_config.h — ver o comentario la pra o que cada uma resolve.
+      for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
+        const uint16_t y = i / 8;
+        uint16_t x = i % 8;
+        if (BOARD_MATRIX_MIRROR_X) x = 7 - x;
+        if (BOARD_MATRIX_SERPENTINE && (y % 2) == 0) x = 7 - x;
+        const uint16_t phys = y * 8 + x;
+        if (idle) {
+          ledBuf[phys] = {idleMatrix[i].r, idleMatrix[i].g, idleMatrix[i].b};
+        } else {
+          const SimhubColor c = simhub_get_matrix_led(i);
+          ledBuf[phys] = {c.r, c.g, c.b};
+        }
       }
     }
 
