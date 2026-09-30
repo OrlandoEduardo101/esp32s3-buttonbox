@@ -89,7 +89,7 @@ static void nvsSaveBrightness() {
 //   INPUT_IGNITION_ON                -> bit 15 / Botao 16
 //   INPUT_IGNITION_IGN               -> bit 16 / Botao 17
 //   INPUT_START_ENGINE               -> bit 17 / Botao 18
-//   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS]
+//   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
 //   INPUT_KILL_SWITCH_01             -> bit 19 / Botao 20
 //   INPUT_KILL_SWITCH_02             -> bit 20 / Botao 21
 //   INPUT_KILL_SWITCH_03             -> bit 21 / Botao 22
@@ -127,55 +127,78 @@ static EncoderPulseState encoderPulse[8];
 static const uint32_t ENCODER_PULSE_HIGH_MS    = 30;
 static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 
-// Freio de estacionamento: pulso de toggle, NAO nivel espelhado. Spec em
-// docs/INPUTS_PINOUT.md secao 7 (decidida com o usuario faz tempo, mas
-// nunca chegou a ser implementada ate agora -- a integracao HID original
-// tratou INPUT_HANDBRAKE igual a qualquer outro botao de nivel, o que
-// esta ERRADO para o Euro/American Truck Simulator: o bind padrao de
-// freio de estacionamento nesses jogos e' TOGGLE (alterna a cada aperto),
-// e o manete fisico e' um switch de 2 posicoes ESTAVEIS, nao momentaneo.
-// Se o HID so espelhasse o nivel do switch, o jogo veria "segurar o
-// botao" enquanto o freio ficasse puxado -- nao "apertar", entao nao
-// alternaria de volta quando o manete voltasse pra cima.
+// Entradas de nivel que precisam virar PULSO DE TOGGLE em vez de nivel
+// espelhado, porque a ACAO do jogo em que serao bindadas espera "aperta e
+// alterna" (toggle por evento), nao "segura enquanto ligado" -- mas o
+// hardware fisico delas e' um switch de posicao MANTIDA (liga e fica),
+// nao um botao momentaneo. Se o HID so espelhasse o nivel do switch, o
+// jogo veria "segurando o botao" enquanto a chave ficasse na posicao ON, o
+// que nao dispara um novo toggle quando ela volta pra OFF -- o estado no
+// jogo destrava do estado fisico da chave.
 //
-// Solucao (a mesma dos encoders): CADA troca de posicao do manete --
-// PRESSED (desceu) OU RELEASED (subiu), as duas direcoes -- dispara UM
-// pulso momentaneo no bit, nunca um nivel sustentado. Isso mantem o
-// manete fisico sempre coerente com o estado do freio no jogo, contanto
-// que os dois comecem sincronizados. Reaproveita o mesmo tipo/constantes
-// de pulso dos encoders por ser exatamente o mesmo problema.
-static EncoderPulseState handbrakePulse;
+// Caso conhecido e documentado hoje: freio de estacionamento do
+// Euro/American Truck Simulator, bind padrao e' toggle (docs/
+// INPUTS_PINOUT.md secao 7). O MESMO problema pode aparecer em qualquer
+// chave caca que voce bindar a uma acao de toggle no jogo (farol alto,
+// pisca-alerta, luz de teto, etc.) -- se acontecer, e' so adicionar o
+// InputId aqui embaixo, nao precisa escrever funcao nova.
+//
+// Mecanismo: qualquer troca de posicao da chave -- PRESSED OU RELEASED,
+// as duas direcoes -- dispara UM pulso momentaneo no bit (30ms high +
+// 20ms low gap, mesmas constantes e mesma maquina de estados dos
+// encoders). Isso mantem a posicao fisica da chave sempre coerente com o
+// estado no jogo, contanto que os dois comecem sincronizados.
+static const InputId TOGGLE_PULSE_IDS[] = {
+  INPUT_HANDBRAKE,
+};
+static const uint8_t TOGGLE_PULSE_COUNT =
+    sizeof(TOGGLE_PULSE_IDS) / sizeof(TOGGLE_PULSE_IDS[0]);
+static EncoderPulseState togglePulse[TOGGLE_PULSE_COUNT];
 
-static void updateHandbrakePulse(uint32_t &buttons, uint32_t now) {
-  const uint32_t bit = (1UL << (uint8_t)INPUT_HANDBRAKE);
+static void updateTogglePulses(uint32_t &buttons, uint32_t now) {
+  for (uint8_t i = 0; i < TOGGLE_PULSE_COUNT; i++) {
+    const InputId      id  = TOGGLE_PULSE_IDS[i];
+    const uint32_t      bit = (1UL << (uint8_t)id);
+    EncoderPulseState &p   = togglePulse[i];
 
-  switch (handbrakePulse.phase) {
-    case EncoderPulsePhase::Idle: {
-      const InputEventType ev = inputs_get_event(INPUT_HANDBRAKE);
-      if (ev == INPUT_EVENT_PRESSED || ev == INPUT_EVENT_RELEASED) {
-        handbrakePulse.phase = EncoderPulsePhase::High;
-        handbrakePulse.phaseUntilMs = now + ENCODER_PULSE_HIGH_MS;
+    switch (p.phase) {
+      case EncoderPulsePhase::Idle: {
+        const InputEventType ev = inputs_get_event(id);
+        if (ev == INPUT_EVENT_PRESSED || ev == INPUT_EVENT_RELEASED) {
+          p.phase = EncoderPulsePhase::High;
+          p.phaseUntilMs = now + ENCODER_PULSE_HIGH_MS;
+          buttons |= bit;
+        } else {
+          buttons &= ~bit;
+        }
+        break;
+      }
+      case EncoderPulsePhase::High:
         buttons |= bit;
-      } else {
+        if ((int32_t)(now - p.phaseUntilMs) >= 0) {
+          p.phase = EncoderPulsePhase::LowGap;
+          p.phaseUntilMs = now + ENCODER_PULSE_LOW_GAP_MS;
+          buttons &= ~bit;
+        }
+        break;
+      case EncoderPulsePhase::LowGap:
         buttons &= ~bit;
-      }
-      break;
+        if ((int32_t)(now - p.phaseUntilMs) >= 0) {
+          p.phase = EncoderPulsePhase::Idle;
+        }
+        break;
     }
-    case EncoderPulsePhase::High:
-      buttons |= bit;
-      if ((int32_t)(now - handbrakePulse.phaseUntilMs) >= 0) {
-        handbrakePulse.phase = EncoderPulsePhase::LowGap;
-        handbrakePulse.phaseUntilMs = now + ENCODER_PULSE_LOW_GAP_MS;
-        buttons &= ~bit;
-      }
-      break;
-    case EncoderPulsePhase::LowGap:
-      buttons &= ~bit;
-      if ((int32_t)(now - handbrakePulse.phaseUntilMs) >= 0) {
-        handbrakePulse.phase = EncoderPulsePhase::Idle;
-      }
-      break;
   }
+}
+
+// Confere se um InputId esta na lista TOGGLE_PULSE_IDS acima (usado pra
+// excluir esses IDs do espelhamento de nivel generico, ja que
+// updateTogglePulses() cuida deles sozinho).
+static bool isTogglePulseId(InputId id) {
+  for (uint8_t i = 0; i < TOGGLE_PULSE_COUNT; i++) {
+    if (TOGGLE_PULSE_IDS[i] == id) return true;
+  }
+  return false;
 }
 
 // LED do botao Start Engine (GPIO2) — espelha a IGNICAO, nao o botao.
@@ -685,19 +708,19 @@ void loop() {
   // Entradas de nivel (botões, ignição, start, chaves caça): mapa
   // explicito no topo do arquivo — bit = (uint8_t)id. inputs_get_state()
   // já vem debounced (MCP23017/74HC4067 debouncam na própria camada).
-  // INPUT_HANDBRAKE fica de fora: é pulso de toggle, não nível — ver
-  // updateHandbrakePulse() no topo do arquivo.
+  // IDs em TOGGLE_PULSE_IDS ficam de fora: são pulso de toggle, não nível
+  // — ver updateTogglePulses() no topo do arquivo.
   for (uint8_t id = 0; id < INPUT_LEVEL_ID_COUNT; id++) {
-    if (id == INPUT_HANDBRAKE) continue;
+    if (isTogglePulseId((InputId)id)) continue;
     const uint32_t bit = (1UL << id);
     if (inputs_get_state((InputId)id)) buttons |= bit;
     else                                buttons &= ~bit;
   }
 
-  // Freio de estacionamento: pulso de toggle a cada troca de posição do
-  // manete (ver updateHandbrakePulse no topo do arquivo) — exigência do
-  // bind padrão de freio do Euro/American Truck Simulator.
-  updateHandbrakePulse(buttons, now);
+  // Chaves de toggle (freio de estacionamento hoje; qualquer chave caça
+  // que precisar entra na lista TOGGLE_PULSE_IDS, sem função nova): pulso
+  // a cada troca de posição — ver updateTogglePulses() no topo do arquivo.
+  updateTogglePulses(buttons, now);
 
   // Encoders: cada detent vira um pulso momentâneo (ver
   // updateEncoderPulses no topo do arquivo), nunca um nível.
