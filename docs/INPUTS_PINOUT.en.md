@@ -478,8 +478,17 @@ button) stay level because both are already physically momentary on their
 own — the button releases itself, and the IGN contact, on a spring-
 returning start switch (typical of a scooter-style key), also only stays
 closed while held. A brief press/turn already produces the edge a game
-toggle bind expects, no conversion needed. Which of the two gets ETS2/
-ATS's "Engine startup/shutdown" bind is your call, made in-game.
+toggle bind expects, no conversion needed.
+
+Intended use (decided with the user):
+- **`INPUT_IGNITION_IGN` (Button 17)**: the actual engine start — ETS2/
+  ATS's "Engine startup/shutdown" bind. It's the key itself being turned
+  further, just like a real car/truck (ON turns on the electrics, turning
+  further cranks the starter).
+- **`INPUT_START_ENGINE` (Button 18)**: a **separate illuminated button**,
+  with no fixed destination — free for any purpose (starting the engine
+  in a different racing game that has its own dedicated button, or
+  whatever else needs a spare push button).
 
 `INPUT_IGNITION_ON` (key position 2) is **pulse**, not level — the game
 has a native bind for it, "Toggle Engine Electricity" (turns on the

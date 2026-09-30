@@ -475,8 +475,16 @@ como nível porque os dois já são fisicamente momentâneos por si só — o
 botão solta sozinho, e o contato IGN, numa chave de partida com retorno por
 mola (típico de chave tipo scooter), também só fica fechado enquanto
 segurado. Um aperto/giro breve já produz a borda que um bind de toggle do
-jogo espera, sem precisar de conversão nenhuma. Qual dos dois recebe o bind
-"Ligar/Desligar Motor" do ETS2/ATS é escolha sua, feita no próprio jogo.
+jogo espera, sem precisar de conversão nenhuma.
+
+Uso pretendido (decidido com o usuário):
+- **`INPUT_IGNITION_IGN` (Botão 17)**: partida do motor de verdade — bind
+  "Ligar/Desligar Motor" do ETS2/ATS. É o giro da própria chave, igual
+  carro/caminhão de verdade (ON liga a elétrica, girar mais dá a partida).
+- **`INPUT_START_ENGINE` (Botão 18)**: botão **iluminado separado**, sem
+  destino fixo — livre pra qualquer função (partida num jogo de corrida
+  diferente que tenha botão próprio, ou qualquer outro uso que precise de
+  um push button avulso).
 
 `INPUT_IGNITION_ON` (posição 2 da chave) é **pulso**, não nível — o jogo
 tem um bind nativo pra ela, "Ligar/Desligar Eletricidade do Motor" (liga

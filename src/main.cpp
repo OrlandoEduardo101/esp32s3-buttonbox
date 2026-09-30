@@ -87,8 +87,8 @@ static void nvsSaveBrightness() {
 //   INPUT_BUTTON_14 (SW encoder 3)   -> bit 13 / Botao 14
 //   INPUT_BUTTON_15 (SW encoder 4)   -> bit 14 / Botao 15
 //   INPUT_IGNITION_ON                -> bit 15 / Botao 16  [pulso, nao nivel — toggle do ETS2/ATS ("Ligar/Desligar Eletricidade"), ver TOGGLE_PULSE_IDS]
-//   INPUT_IGNITION_IGN               -> bit 16 / Botao 17
-//   INPUT_START_ENGINE               -> bit 17 / Botao 18
+//   INPUT_IGNITION_IGN               -> bit 16 / Botao 17  [partida do motor de verdade — bind "Ligar/Desligar Motor" do ETS2/ATS]
+//   INPUT_START_ENGINE               -> bit 17 / Botao 18  [botao iluminado avulso — sem destino fixo, livre pra qualquer jogo/função]
 //   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
 //   INPUT_KILL_SWITCH_01             -> bit 19 / Botao 20  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
 //   INPUT_KILL_SWITCH_02             -> bit 20 / Botao 21  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
@@ -160,14 +160,24 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // FISICA da chave normalmente, sem nenhum efeito colateral desta mudanca.
 //
 // INPUT_IGNITION_IGN (o contato que so fecha durante o giro/partida) e
-// INPUT_START_ENGINE (o botao iluminado separado) ficam DE FORA por ora:
-// ambos sao fisicamente momentaneos (o botao solta sozinho ao ser
-// liberado; o contato IGN, se a chave for de retorno por mola pra posicao
-// 2 -- tipico de chave de partida tipo scooter -- tambem so fica fechado
-// enquanto voce segura). Um aperto/giro breve ja produz a borda que um
-// toggle espera, sem precisar de conversao. O bind "Ligar/Desligar Motor"
-// do jogo (que da partida de verdade) vai num desses dois -- decisao do
-// usuario qual, e' so bindar no proprio ETS2/ATS.
+// INPUT_START_ENGINE (o botao iluminado separado) ficam DE FORA de
+// proposito: os dois ja sao fisicamente momentaneos (o botao solta
+// sozinho; o contato IGN, numa chave com retorno por mola pra posicao 2 --
+// tipico de chave de partida tipo scooter -- tambem so fica fechado
+// enquanto voce segura), entao um aperto/giro breve ja produz a borda que
+// um toggle espera, sem precisar de conversao.
+//
+// Uso pretendido (decidido com o usuario):
+//   - INPUT_IGNITION_IGN (Botao 17): partida do motor de VERDADE -- bind
+//     "Ligar/Desligar Motor" do ETS2/ATS. E' o giro da propria chave, igual
+//     carro/caminhao de verdade (ON liga eletrica, girar mais da partida).
+//   - INPUT_START_ENGINE (Botao 18): botao ILUMINADO separado, livre pra
+//     qualquer funcao -- outro jogo de corrida com botao de partida
+//     proprio, ou qualquer outra coisa que precisar de um push button
+//     extra. Nao tem destino fixo no ETS2/ATS.
+// Nenhum dos dois exige mudanca de firmware pra nenhuma dessas funcoes --
+// nivel momentaneo ja serve pra qualquer bind (toggle ou hold), a escolha
+// de destino e' feita 100% dentro de cada jogo.
 //
 // Mecanismo: qualquer troca de posicao da chave -- PRESSED OU RELEASED,
 // as duas direcoes -- dispara UM pulso momentaneo no bit (30ms high +
