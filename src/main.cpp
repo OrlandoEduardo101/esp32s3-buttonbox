@@ -86,7 +86,7 @@ static void nvsSaveBrightness() {
 //   INPUT_BUTTON_13 (SW encoder 2)   -> bit 12 / Botao 13
 //   INPUT_BUTTON_14 (SW encoder 3)   -> bit 13 / Botao 14
 //   INPUT_BUTTON_15 (SW encoder 4)   -> bit 14 / Botao 15
-//   INPUT_IGNITION_ON                -> bit 15 / Botao 16
+//   INPUT_IGNITION_ON                -> bit 15 / Botao 16  [pulso, nao nivel — toggle do ETS2/ATS ("Ligar/Desligar Eletricidade"), ver TOGGLE_PULSE_IDS]
 //   INPUT_IGNITION_IGN               -> bit 16 / Botao 17
 //   INPUT_START_ENGINE               -> bit 17 / Botao 18
 //   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
@@ -149,11 +149,25 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // toggle, TIRE o InputId dela desta lista -- nivel volta a ser o certo
 // nesse caso especifico.
 //
-// INPUT_IGNITION_ON fica DE FORA de proposito: nao corresponde a nenhum
-// controle nativo do ETS2/ATS (o jogo so tem "ligar/desligar motor", que
-// e' o botao Start Engine separado) -- ela so acende o LED do Start
-// Engine e, se um dia virar entrada de algum script do SimHub, esse tipo
-// de script le ESTADO bruto, nao pulso. Nivel e' o certo pra ela.
+// INPUT_IGNITION_ON TAMBEM entra na lista: o ETS2/ATS tem sim um bind
+// nativo pra ela -- "Ligar/Desligar Eletricidade do Motor" (liga o
+// painel/GPS sem girar o motor), que E' toggle, confirmado pelo usuario a
+// partir do proprio menu de Teclas e Botoes do jogo. A chave fisica
+// (posicao 2 do conjunto tipo scooter) e' mantida, entao tem exatamente o
+// mesmo problema do freio. IMPORTANTE: isto so afeta o BIT do HID que vai
+// pro jogo -- updateStartEngineLed() le inputs_get_state(INPUT_IGNITION_ON)
+// direto (nao o bit do HID), entao o LED continua acompanhando a POSICAO
+// FISICA da chave normalmente, sem nenhum efeito colateral desta mudanca.
+//
+// INPUT_IGNITION_IGN (o contato que so fecha durante o giro/partida) e
+// INPUT_START_ENGINE (o botao iluminado separado) ficam DE FORA por ora:
+// ambos sao fisicamente momentaneos (o botao solta sozinho ao ser
+// liberado; o contato IGN, se a chave for de retorno por mola pra posicao
+// 2 -- tipico de chave de partida tipo scooter -- tambem so fica fechado
+// enquanto voce segura). Um aperto/giro breve ja produz a borda que um
+// toggle espera, sem precisar de conversao. O bind "Ligar/Desligar Motor"
+// do jogo (que da partida de verdade) vai num desses dois -- decisao do
+// usuario qual, e' so bindar no proprio ETS2/ATS.
 //
 // Mecanismo: qualquer troca de posicao da chave -- PRESSED OU RELEASED,
 // as duas direcoes -- dispara UM pulso momentaneo no bit (30ms high +
@@ -161,6 +175,7 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // encoders). Isso mantem a posicao fisica da chave sempre coerente com o
 // estado no jogo, contanto que os dois comecem sincronizados.
 static const InputId TOGGLE_PULSE_IDS[] = {
+  INPUT_IGNITION_ON,
   INPUT_KILL_SWITCH_01,
   INPUT_KILL_SWITCH_02,
   INPUT_KILL_SWITCH_03,

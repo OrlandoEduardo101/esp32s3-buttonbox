@@ -456,7 +456,7 @@ comentário no topo de `src/main.cpp`):
 | INPUT_BUTTON_13 (SW encoder 2) | 12 | 13 | nível |
 | INPUT_BUTTON_14 (SW encoder 3) | 13 | 14 | nível |
 | INPUT_BUTTON_15 (SW encoder 4) | 14 | 15 | nível |
-| INPUT_IGNITION_ON | 15 | 16 | nível |
+| INPUT_IGNITION_ON | 15 | 16 | pulso |
 | INPUT_IGNITION_IGN | 16 | 17 | nível |
 | INPUT_START_ENGINE | 17 | 18 | nível |
 | INPUT_HANDBRAKE | 18 | 19 | pulso |
@@ -467,23 +467,36 @@ comentário no topo de `src/main.cpp`):
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulso |
 | **livre** (era o heartbeat de bring-up) | 31 | 32 | — |
 
-Entradas de **nível** (botões/ignição): `inputs_get_state()` já debounced é
-espelhado direto no bit — sem lógica extra no `main.cpp`. A ignição
-(`INPUT_IGNITION_ON`/`_IGN`) fica de propósito como nível: a chave física é
-ela mesma um switch com posição mantida, não corresponde a nenhum controle
-nativo do ETS2/ATS (o jogo só tem "ligar/desligar motor", que é o botão
-Start Engine separado) — se um dia virar entrada de algum script do
-SimHub, esse tipo de script lê estado bruto, não pulso.
+Entradas de **nível** (botões/`INPUT_IGNITION_IGN`/`INPUT_START_ENGINE`):
+`inputs_get_state()` já debounced é espelhado direto no bit — sem lógica
+extra no `main.cpp`. `INPUT_IGNITION_IGN` (contato que só fecha durante o
+giro/partida) e `INPUT_START_ENGINE` (o botão iluminado separado) ficam
+como nível porque os dois já são fisicamente momentâneos por si só — o
+botão solta sozinho, e o contato IGN, numa chave de partida com retorno por
+mola (típico de chave tipo scooter), também só fica fechado enquanto
+segurado. Um aperto/giro breve já produz a borda que um bind de toggle do
+jogo espera, sem precisar de conversão nenhuma. Qual dos dois recebe o bind
+"Ligar/Desligar Motor" do ETS2/ATS é escolha sua, feita no próprio jogo.
 
-As 4 chaves caça (`INPUT_KILL_SWITCH_01..04`) são **pulso**, não nível —
-mesmo motivo do freio de estacionamento abaixo: praticamente todo acessório
-de caminhão no ETS2/ATS (pisca-alerta, giroflex, luz de teto, travamento de
-diferencial, etc.) é um bind de *toggle* no jogo, e o tipo de chave usado
-aqui (alavanca/bat, fica na posição) é justamente pra esse uso. Fazem parte
-da mesma lista configurável `TOGGLE_PULSE_IDS` do freio, em `src/main.cpp`
-— se alguma acabar bindada a uma ação do tipo *hold* (efeito só existe
-enquanto segura, ex.: buzina) em vez de toggle, é só tirar o `InputId` dela
-da lista para voltar a nível.
+`INPUT_IGNITION_ON` (posição 2 da chave) é **pulso**, não nível — o jogo
+tem um bind nativo pra ela, "Ligar/Desligar Eletricidade do Motor" (liga
+painel/GPS sem girar o motor), confirmado como *toggle* pelo próprio menu
+de Teclas e Botões do ETS2/ATS. A chave física é mantida na posição, então
+tem o mesmo problema do freio abaixo. Isto só afeta o BIT do HID que vai
+pro jogo — `updateStartEngineLed()` lê `inputs_get_state(INPUT_IGNITION_ON)`
+direto (não o bit do HID), então o LED do Start Engine continua
+acompanhando a posição física da chave normalmente, sem nenhum efeito
+colateral desta conversão.
+
+As 4 chaves caça (`INPUT_KILL_SWITCH_01..04`) também são **pulso**, não
+nível — mesmo motivo: praticamente todo acessório de caminhão no ETS2/ATS
+(pisca-alerta, giroflex, luz de teto, travamento de diferencial, etc.) é um
+bind de *toggle* no jogo, e o tipo de chave usado aqui (alavanca/bat, fica
+na posição) é justamente pra esse uso. `INPUT_IGNITION_ON` e as 4 chaves
+caça fazem parte da mesma lista configurável `TOGGLE_PULSE_IDS`, junto com
+o freio, em `src/main.cpp` — se algum acabar bindado a uma ação do tipo
+*hold* (efeito só existe enquanto segura, ex.: buzina) em vez de toggle, é
+só tirar o `InputId` dele da lista para voltar a nível.
 
 Entradas de **encoder** (CW/CCW): como `lib/inputs` só expõe EVENTO pra
 rotação (nunca um "nível segurado"), o `main.cpp` traduz cada evento

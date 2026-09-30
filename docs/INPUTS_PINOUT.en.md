@@ -459,7 +459,7 @@ comment at the top of `src/main.cpp`):
 | INPUT_BUTTON_13 (encoder 2 SW) | 12 | 13 | level |
 | INPUT_BUTTON_14 (encoder 3 SW) | 13 | 14 | level |
 | INPUT_BUTTON_15 (encoder 4 SW) | 14 | 15 | level |
-| INPUT_IGNITION_ON | 15 | 16 | level |
+| INPUT_IGNITION_ON | 15 | 16 | pulse |
 | INPUT_IGNITION_IGN | 16 | 17 | level |
 | INPUT_START_ENGINE | 17 | 18 | level |
 | INPUT_HANDBRAKE | 18 | 19 | pulse |
@@ -470,24 +470,36 @@ comment at the top of `src/main.cpp`):
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulse |
 | **free** (was the bring-up heartbeat) | 31 | 32 | — |
 
-**Level** inputs (buttons/ignition): the already-debounced
-`inputs_get_state()` is mirrored directly onto the bit — no extra logic
-in `main.cpp`. Ignition (`INPUT_IGNITION_ON`/`_IGN`) is deliberately a
-level: the physical key switch itself holds a position, doesn't correspond
-to any native ETS2/ATS control (the game only has "engine startup/
-shutdown", which is the separate Start Engine button) — if it ever becomes
-an input to some SimHub script, that kind of script reads raw state, not
-a pulse.
+**Level** inputs (buttons/`INPUT_IGNITION_IGN`/`INPUT_START_ENGINE`): the
+already-debounced `inputs_get_state()` is mirrored directly onto the bit —
+no extra logic in `main.cpp`. `INPUT_IGNITION_IGN` (the contact that only
+closes while cranking) and `INPUT_START_ENGINE` (the separate illuminated
+button) stay level because both are already physically momentary on their
+own — the button releases itself, and the IGN contact, on a spring-
+returning start switch (typical of a scooter-style key), also only stays
+closed while held. A brief press/turn already produces the edge a game
+toggle bind expects, no conversion needed. Which of the two gets ETS2/
+ATS's "Engine startup/shutdown" bind is your call, made in-game.
 
-The 4 kill switches (`INPUT_KILL_SWITCH_01..04`) are **pulse**, not level
-— same reason as the parking brake below: nearly every truck accessory in
-ETS2/ATS (hazard lights, beacon light, cabin light, differential lock,
-etc.) is a *toggle* bind in the game, and the switch style used here
-(bat/lever, holds its position) is exactly meant for that. They share the
-same configurable `TOGGLE_PULSE_IDS` list as the parking brake, in
-`src/main.cpp` — if one ends up bound to a *hold*-type action instead
-(effect only exists while held, e.g. a horn), just remove its `InputId`
-from the list to go back to level.
+`INPUT_IGNITION_ON` (key position 2) is **pulse**, not level — the game
+has a native bind for it, "Toggle Engine Electricity" (turns on the
+dashboard/GPS without cranking the engine), confirmed as a *toggle* from
+ETS2/ATS's own Controls menu. The physical switch holds its position, so
+it has the same problem as the parking brake below. This only affects the
+HID bit that goes to the game — `updateStartEngineLed()` reads
+`inputs_get_state(INPUT_IGNITION_ON)` directly (not the HID bit), so the
+Start Engine LED keeps following the key's physical position normally,
+with no side effect from this conversion.
+
+The 4 kill switches (`INPUT_KILL_SWITCH_01..04`) are also **pulse**, not
+level — same reason: nearly every truck accessory in ETS2/ATS (hazard
+lights, beacon light, cabin light, differential lock, etc.) is a *toggle*
+bind in the game, and the switch style used here (bat/lever, holds its
+position) is exactly meant for that. `INPUT_IGNITION_ON` and the 4 kill
+switches share the same configurable `TOGGLE_PULSE_IDS` list, along with
+the parking brake, in `src/main.cpp` — if one ends up bound to a
+*hold*-type action instead (effect only exists while held, e.g. a horn),
+just remove its `InputId` from the list to go back to level.
 
 **Encoder** inputs (CW/CCW): since `lib/inputs` only exposes an EVENT for
 rotation (never a "held level"), `main.cpp` translates each pending event
