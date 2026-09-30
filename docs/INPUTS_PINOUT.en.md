@@ -359,7 +359,7 @@ brake's state in the game, as long as the two start in sync (e.g., a
 session always starts with the lever down / brake engaged, which matches
 the real default of a parked truck).
 
-**Implemented.** `updateHandbrakePulse()` in `src/main.cpp` — reuses the
+**Implemented.** `updateTogglePulses()` in `src/main.cpp` — reuses the
 same pulse mechanism as the encoders (30ms high + 20ms low gap). Before
 this, the HID integration in section 10 treated `INPUT_HANDBRAKE` like any
 other level button by oversight, which is exactly the wrong behavior
@@ -463,23 +463,31 @@ comment at the top of `src/main.cpp`):
 | INPUT_IGNITION_IGN | 16 | 17 | level |
 | INPUT_START_ENGINE | 17 | 18 | level |
 | INPUT_HANDBRAKE | 18 | 19 | pulse |
-| INPUT_KILL_SWITCH_01..04 | 19-22 | 20-23 | level |
+| INPUT_KILL_SWITCH_01..04 | 19-22 | 20-23 | pulse |
 | INPUT_ENCODER_01_CW / _CCW | 23 / 24 | 24 / 25 | pulse |
 | INPUT_ENCODER_02_CW / _CCW | 25 / 26 | 26 / 27 | pulse |
 | INPUT_ENCODER_03_CW / _CCW | 27 / 28 | 28 / 29 | pulse |
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulse |
 | **free** (was the bring-up heartbeat) | 31 | 32 | — |
 
-**Level** inputs (buttons/kill switches/ignition): the already-debounced
+**Level** inputs (buttons/ignition): the already-debounced
 `inputs_get_state()` is mirrored directly onto the bit — no extra logic
 in `main.cpp`. Ignition (`INPUT_IGNITION_ON`/`_IGN`) is deliberately a
-level: the physical key switch itself holds a position, and that's what
-games/mods with an ignition state expect to receive (the key is on or it
-isn't, not a per-press "toggle"). The 4 kill switches
-(`INPUT_KILL_SWITCH_01..04`) are also pure level — no special in-game
-behavior documented for them; if one is ever bound to a toggle-style
-action in a game, the same problem as the parking brake below applies,
-and the fix is the same.
+level: the physical key switch itself holds a position, doesn't correspond
+to any native ETS2/ATS control (the game only has "engine startup/
+shutdown", which is the separate Start Engine button) — if it ever becomes
+an input to some SimHub script, that kind of script reads raw state, not
+a pulse.
+
+The 4 kill switches (`INPUT_KILL_SWITCH_01..04`) are **pulse**, not level
+— same reason as the parking brake below: nearly every truck accessory in
+ETS2/ATS (hazard lights, beacon light, cabin light, differential lock,
+etc.) is a *toggle* bind in the game, and the switch style used here
+(bat/lever, holds its position) is exactly meant for that. They share the
+same configurable `TOGGLE_PULSE_IDS` list as the parking brake, in
+`src/main.cpp` — if one ends up bound to a *hold*-type action instead
+(effect only exists while held, e.g. a horn), just remove its `InputId`
+from the list to go back to level.
 
 **Encoder** inputs (CW/CCW): since `lib/inputs` only exposes an EVENT for
 rotation (never a "held level"), `main.cpp` translates each pending event
@@ -495,8 +503,9 @@ level — same mechanic as the encoders (an event becomes a momentary
 edge), but for a different GAME reason: Euro/American Truck Simulator's
 default parking-brake bind is a toggle, and a 2-stable-position switch
 doesn't match "hold a level" — see section 7 for the full reasoning.
-`updateHandbrakePulse()` fires one pulse on each lever position change,
-in either direction.
+`updateTogglePulses()` (the `TOGGLE_PULSE_IDS` list, shared with the 4
+kill switches above) fires one pulse on each position change, in either
+direction.
 
 **BOOT no longer feeds the HID.** The old `BOOT -> bit 0 (Button 1)` was
 a bring-up simulated value (pre-real-hardware); it was removed and bit 0

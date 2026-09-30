@@ -359,7 +359,7 @@ no jogo, contanto que os dois comecem sincronizados (ex.: sessão sempre
 inicia com o manete pra baixo / freio acionado, que é o padrão real de
 caminhão parado).
 
-**Implementado.** `updateHandbrakePulse()` em `src/main.cpp` — reaproveita o
+**Implementado.** `updateTogglePulses()` em `src/main.cpp` — reaproveita o
 mesmo mecanismo de pulso dos encoders (30ms high + 20ms low gap). Antes
 disso, a integração HID da seção 10 tratava `INPUT_HANDBRAKE` igual a
 qualquer outro botão de nível por descuido, o que é exatamente o
@@ -460,22 +460,30 @@ comentário no topo de `src/main.cpp`):
 | INPUT_IGNITION_IGN | 16 | 17 | nível |
 | INPUT_START_ENGINE | 17 | 18 | nível |
 | INPUT_HANDBRAKE | 18 | 19 | pulso |
-| INPUT_KILL_SWITCH_01..04 | 19-22 | 20-23 | nível |
+| INPUT_KILL_SWITCH_01..04 | 19-22 | 20-23 | pulso |
 | INPUT_ENCODER_01_CW / _CCW | 23 / 24 | 24 / 25 | pulso |
 | INPUT_ENCODER_02_CW / _CCW | 25 / 26 | 26 / 27 | pulso |
 | INPUT_ENCODER_03_CW / _CCW | 27 / 28 | 28 / 29 | pulso |
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulso |
 | **livre** (era o heartbeat de bring-up) | 31 | 32 | — |
 
-Entradas de **nível** (botões/chaves caça/ignição): `inputs_get_state()` já
-debounced é espelhado direto no bit — sem lógica extra no `main.cpp`. A
-ignição (`INPUT_IGNITION_ON`/`_IGN`) fica de propósito como nível: a chave
-física é ela mesma um switch com posição mantida, e é assim que jogos/mods
-com estado de ignição esperam receber (o key está ligado ou não, não é um
-"toggle" por aperto). As 4 chaves caça (`INPUT_KILL_SWITCH_01..04`) também
-são nível puro — nenhum comportamento de jogo especial documentado pra
-elas; se um dia forem bindadas a uma ação do tipo toggle no jogo, o mesmo
-problema do freio de estacionamento abaixo se aplica e o fix é o mesmo.
+Entradas de **nível** (botões/ignição): `inputs_get_state()` já debounced é
+espelhado direto no bit — sem lógica extra no `main.cpp`. A ignição
+(`INPUT_IGNITION_ON`/`_IGN`) fica de propósito como nível: a chave física é
+ela mesma um switch com posição mantida, não corresponde a nenhum controle
+nativo do ETS2/ATS (o jogo só tem "ligar/desligar motor", que é o botão
+Start Engine separado) — se um dia virar entrada de algum script do
+SimHub, esse tipo de script lê estado bruto, não pulso.
+
+As 4 chaves caça (`INPUT_KILL_SWITCH_01..04`) são **pulso**, não nível —
+mesmo motivo do freio de estacionamento abaixo: praticamente todo acessório
+de caminhão no ETS2/ATS (pisca-alerta, giroflex, luz de teto, travamento de
+diferencial, etc.) é um bind de *toggle* no jogo, e o tipo de chave usado
+aqui (alavanca/bat, fica na posição) é justamente pra esse uso. Fazem parte
+da mesma lista configurável `TOGGLE_PULSE_IDS` do freio, em `src/main.cpp`
+— se alguma acabar bindada a uma ação do tipo *hold* (efeito só existe
+enquanto segura, ex.: buzina) em vez de toggle, é só tirar o `InputId` dela
+da lista para voltar a nível.
 
 Entradas de **encoder** (CW/CCW): como `lib/inputs` só expõe EVENTO pra
 rotação (nunca um "nível segurado"), o `main.cpp` traduz cada evento
@@ -491,8 +499,9 @@ Entrada de **freio de estacionamento** (`INPUT_HANDBRAKE`): também vira
 vira uma borda momentânea), mas por um motivo de JOGO diferente: o bind
 padrão de freio no Euro/American Truck Simulator é toggle, e um switch de
 2 posições estáveis não bate com "segurar nível" — ver seção 7 para o
-raciocínio completo. `updateHandbrakePulse()` dispara um pulso a cada
-troca de posição do manete, nas duas direções.
+raciocínio completo. `updateTogglePulses()` (lista `TOGGLE_PULSE_IDS`,
+compartilhada com as 4 chaves caça acima) dispara um pulso a cada troca de
+posição, nas duas direções.
 
 **BOOT deixou de alimentar o HID.** O antigo `BOOT -> bit 0 (Botão 1)` era
 um valor simulado de bring-up (pré-hardware-real); foi removido e o bit 0

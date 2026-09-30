@@ -190,7 +190,7 @@ modificar código").
 | Freio de estacionamento | Estado do canal acompanha a posição da alavanca (nível, neste teste isolado do mux) — no HID final (`joy.cpl`) o botão 19 é **pulso**, não nível: cada troca de posição dispara um clique só, ver `docs/INPUTS_PINOUT.md` seção 7 | `mux-test` (canal C14) |
 | Ignição (3 posições) | ON e IGN corretos, IGN só durante o crank (ver `docs/INPUTS_PINOUT.md` seção 3) | `mux-test` (canais C12/C13) |
 | Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; o LED é controlado pelo firmware (`updateStartEngineLed()` em `src/main.cpp`), acompanha `INPUT_IGNITION_ON` — testável direto pela serial com `LED 1`/`LED 0`/`LED AUTO`, ver `docs/ARCHITECTURE.md` seção 10 |
-| 4 chaves caça | Estado acompanha a posição da chave | `mcp-test` (GPB4-GPB7) |
+| 4 chaves caça | Estado do canal acompanha a posição da chave (nível, neste teste isolado do MCP) — no HID final (`joy.cpl`) os botões 20-23 são **pulso**, não nível: cada troca de posição dispara um clique só, ver `docs/INPUTS_PINOUT.md` seção 10 | `mcp-test` (GPB4-GPB7) |
 | Múltiplos botões simultâneos | Sem interferência entre bits (não deveria haver — não há matriz) | `inputs-test` (várias entradas ao mesmo tempo, ver o log) |
 | HID no Windows | `joy.cpl` mostra os 31 controles reais; o Botão 32 fica parado (heartbeat removido) | `docs/BASELINE.md` (teste original) + `docs/INPUTS_PINOUT.md` seção 10 (mapa de bits) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respondem | Qualquer terminal serial na porta COM |

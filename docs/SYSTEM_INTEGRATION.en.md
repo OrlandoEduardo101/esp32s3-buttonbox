@@ -190,7 +190,7 @@ responsible layer before modifying code").
 | Parking brake | Channel state follows the lever's position (level, in this isolated mux test) — on the final HID (`joy.cpl`) button 19 is a **pulse**, not a level: each position change fires a single click, see `docs/INPUTS_PINOUT.en.md` section 7 | `mux-test` (channel C14) |
 | Ignition (3 positions) | ON and IGN correct, IGN only during cranking (see `docs/INPUTS_PINOUT.en.md` section 3) | `mux-test` (channels C12/C13) |
 | Start Engine | Button + LED (if already wired) | `mux-test` (channel C11) for the button; the LED is firmware-controlled (`updateStartEngineLed()` in `src/main.cpp`), follows `INPUT_IGNITION_ON` — testable directly over serial with `LED 1`/`LED 0`/`LED AUTO`, see `docs/ARCHITECTURE.en.md` section 10 |
-| 4 toggle switches | State follows the switch's position | `mcp-test` (GPB4-GPB7) |
+| 4 toggle switches | Channel state follows the switch's position (level, in this isolated MCP test) — on the final HID (`joy.cpl`) buttons 20-23 are **pulse**, not level: each position change fires a single click, see `docs/INPUTS_PINOUT.en.md` section 10 | `mcp-test` (GPB4-GPB7) |
 | Multiple simultaneous buttons | No interference between bits (shouldn't be any — there's no matrix) | `inputs-test` (several inputs at once, check the log) |
 | HID on Windows | `joy.cpl` shows the 31 real controls; Button 32 stays idle (heartbeat removed) | `docs/BASELINE.en.md` (original test) + `docs/INPUTS_PINOUT.en.md` section 10 (bit map) |
 | CDC | `PING`→`PONG`, `VERSION`, `IP`, `SETLEDS <n>` respond | Any serial terminal on the COM port |

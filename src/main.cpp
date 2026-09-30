@@ -90,10 +90,10 @@ static void nvsSaveBrightness() {
 //   INPUT_IGNITION_IGN               -> bit 16 / Botao 17
 //   INPUT_START_ENGINE               -> bit 17 / Botao 18
 //   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
-//   INPUT_KILL_SWITCH_01             -> bit 19 / Botao 20
-//   INPUT_KILL_SWITCH_02             -> bit 20 / Botao 21
-//   INPUT_KILL_SWITCH_03             -> bit 21 / Botao 22
-//   INPUT_KILL_SWITCH_04             -> bit 22 / Botao 23
+//   INPUT_KILL_SWITCH_01             -> bit 19 / Botao 20  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
+//   INPUT_KILL_SWITCH_02             -> bit 20 / Botao 21  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
+//   INPUT_KILL_SWITCH_03             -> bit 21 / Botao 22  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
+//   INPUT_KILL_SWITCH_04             -> bit 22 / Botao 23  [pulso, nao nivel — toggle do ETS2/ATS, ver TOGGLE_PULSE_IDS]
 //   INPUT_ENCODER_01_CW              -> bit 23 / Botao 24  [pulso, nao nivel]
 //   INPUT_ENCODER_01_CCW             -> bit 24 / Botao 25  [pulso, nao nivel]
 //   INPUT_ENCODER_02_CW              -> bit 25 / Botao 26  [pulso, nao nivel]
@@ -138,10 +138,22 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 //
 // Caso conhecido e documentado hoje: freio de estacionamento do
 // Euro/American Truck Simulator, bind padrao e' toggle (docs/
-// INPUTS_PINOUT.md secao 7). O MESMO problema pode aparecer em qualquer
-// chave caca que voce bindar a uma acao de toggle no jogo (farol alto,
-// pisca-alerta, luz de teto, etc.) -- se acontecer, e' so adicionar o
-// InputId aqui embaixo, nao precisa escrever funcao nova.
+// INPUTS_PINOUT.md secao 7).
+//
+// As 4 chaves caca entram na mesma lista POR PADRAO: quase todo acessorio
+// de caminhao no ETS2/ATS (pisca-alerta, giroflex, luz de teto, travamento
+// de diferencial, faroil extra, etc.) e' um bind de TOGGLE no jogo -- e o
+// tipo de chave escolhido aqui (alavanca/bat, fica na posicao) e'
+// justamente pra esse uso. Se algum dia uma delas for bindada a uma acao
+// do tipo HOLD (efeito so existe enquanto segura, tipo buzina) em vez de
+// toggle, TIRE o InputId dela desta lista -- nivel volta a ser o certo
+// nesse caso especifico.
+//
+// INPUT_IGNITION_ON fica DE FORA de proposito: nao corresponde a nenhum
+// controle nativo do ETS2/ATS (o jogo so tem "ligar/desligar motor", que
+// e' o botao Start Engine separado) -- ela so acende o LED do Start
+// Engine e, se um dia virar entrada de algum script do SimHub, esse tipo
+// de script le ESTADO bruto, nao pulso. Nivel e' o certo pra ela.
 //
 // Mecanismo: qualquer troca de posicao da chave -- PRESSED OU RELEASED,
 // as duas direcoes -- dispara UM pulso momentaneo no bit (30ms high +
@@ -149,6 +161,10 @@ static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
 // encoders). Isso mantem a posicao fisica da chave sempre coerente com o
 // estado no jogo, contanto que os dois comecem sincronizados.
 static const InputId TOGGLE_PULSE_IDS[] = {
+  INPUT_KILL_SWITCH_01,
+  INPUT_KILL_SWITCH_02,
+  INPUT_KILL_SWITCH_03,
+  INPUT_KILL_SWITCH_04,
   INPUT_HANDBRAKE,
 };
 static const uint8_t TOGGLE_PULSE_COUNT =
