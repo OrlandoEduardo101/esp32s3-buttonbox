@@ -135,10 +135,16 @@ A **single WS2812 chain** on GPIO1: the **8x8 matrix first** (pixels
 these remain two separate logical devices; the code that joins them into
 a single physical chain lives only in `src/main.cpp`.
 
-The matrix uses **serpentine** remapping (alternating rows reversed),
-which is how most 8x8 WS2812 panels are wired. If your panel uses
-straight rows instead, just flip `MATRIX_SERPENTINE` to `false` in
-`src/main.cpp`.
+The matrix supports three independent wiring corrections —
+`BOARD_MATRIX_SERPENTINE`, `BOARD_MATRIX_MIRROR_X` and `BOARD_MATRIX_MIRROR_Y`,
+in `include/board_config.h` — because each panel/mount can differ both in
+internal wiring (zigzag or straight) and in mounting orientation (mirrored
+or not on each axis). On this bench the panel is **straight**-wired,
+mounted equivalent to **rotated 180°** (`SERPENTINE=false`,
+`MIRROR_X=MIRROR_Y=true`). Don't guess from character shapes — use the
+`MATRIXWALK` serial command (`src/main.cpp`), which lights one raw
+physical pixel at a time and prints its index, to find your panel's real
+wiring with certainty.
 
 ## Connection behavior
 

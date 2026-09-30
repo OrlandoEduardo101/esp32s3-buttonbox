@@ -135,10 +135,16 @@ Uma **única cadeia WS2812** no GPIO1: a **matriz 8x8 primeiro** (pixels
 SimHub continuam sendo dois dispositivos lógicos separados; quem junta as
 duas numa cadeia só é o código de integração em `src/main.cpp`.
 
-A matriz usa remapeamento **serpentina** (linhas alternadas invertidas),
-que é como a maioria dos painéis 8x8 de WS2812 é ligada. Se o seu painel
-for de linhas retas, é só trocar `MATRIX_SERPENTINE` para `false` em
-`src/main.cpp`.
+A matriz aceita três correções de fiação independentes —
+`BOARD_MATRIX_SERPENTINE`, `BOARD_MATRIX_MIRROR_X` e `BOARD_MATRIX_MIRROR_Y`,
+em `include/board_config.h` — porque cada painel/montagem pode diferir tanto
+na fiação interna (zigue-zague ou reta) quanto na orientação de montagem
+(espelhado ou não em cada eixo). Nesta bancada o painel é fiação **reta**,
+montado equivalente a **girado 180°** (`SERPENTINE=false`,
+`MIRROR_X=MIRROR_Y=true`). Não adivinhe pela forma de caracteres — use o
+comando serial `MATRIXWALK` (`src/main.cpp`), que acende um pixel físico
+cru por vez e imprime o índice, pra descobrir a fiação real do seu painel
+com certeza.
 
 ## Comportamento de conexão
 
