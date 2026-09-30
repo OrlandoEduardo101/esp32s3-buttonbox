@@ -107,6 +107,32 @@ static const uint8_t  BOARD_MUX_CHANNEL_COUNT  = 15; // C0-C14 (docs/INPUTS_PINO
 // ======================================================================
 static const uint8_t BOARD_WS2812_PIN = 1;
 
+// Remapeamento da matriz 8x8: o SimHub manda os 64 pixels em ordem linear
+// (linha a linha, esquerda->direita, topo->baixo). O remapeamento em
+// src/main.cpp converte isso pro indice fisico real da cadeia, em duas
+// etapas independentes — cada uma resolve um problema de fiação diferente:
+//
+//   MATRIX_SERPENTINE: quase todo painel 8x8 WS2812 barato e' fiado em
+//   zigue-zague por dentro (uma trilha so, sem pular linha) — a linha 0 vai
+//   esquerda->direita, a linha 1 direita->esquerda, e assim por diante.
+//   true corrige isso; false assume fiacao reta (cada linha sempre
+//   esquerda->direita), rara em paineis prontos.
+//
+//   MATRIX_MIRROR_X: espelhamento adicional e' o PAINEL inteiro montado/
+//   ligado com o DIN do lado oposto do esperado (ex.: entra pela direita em
+//   vez da esquerda) — isso espelha a imagem toda no eixo horizontal, POR
+//   CIMA do zigue-zague acima (as duas causas sao independentes: uma e' a
+//   fiacao interna do painel, a outra e' como ele foi montado/orientado).
+//   Sintoma classico: um numero ou letra aparece com a lateralidade
+//   trocada (ex.: um "2" enviado pelo SimHub aparece parecido com um "S").
+//
+// Se a imagem ainda sair errada depois de ajustar estas duas constantes,
+// o proximo suspeito e' inversao VERTICAL (linha 0 fisica = topo do
+// SimHub ou o contrario) — ainda nao existe flag pronta pra isso; avise
+// se precisar.
+static const bool BOARD_MATRIX_SERPENTINE = true;
+static const bool BOARD_MATRIX_MIRROR_X   = true;
+
 // 0x0800 = canal C11 (Start Engine) tratado como active-high.
 //
 // Botão montado nesta bancada é comum-ÂNODO (COM → 3,3V). Fechar a chave

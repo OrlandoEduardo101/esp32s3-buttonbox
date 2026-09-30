@@ -587,18 +587,14 @@ void loop() {
     }
 
     // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
-    // Paineis 8x8 de WS2812 quase sempre sao ligados em serpentina (linhas
-    // alternadas invertidas) — MATRIX_SERPENTINE faz esse remapeamento.
-    // Se a sua matriz for ligada em linhas retas, e' so por false aqui.
-    static const bool MATRIX_SERPENTINE = true;
+    // Duas correcoes de fiacao independentes, configuraveis em
+    // board_config.h — ver o comentario la pra o que cada uma resolve.
     for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
-      uint16_t phys = i;
-      if (MATRIX_SERPENTINE) {
-        const uint16_t y = i / 8;
-        uint16_t x = i % 8;
-        if ((y % 2) == 0) x = 7 - x;
-        phys = y * 8 + x;
-      }
+      const uint16_t y = i / 8;
+      uint16_t x = i % 8;
+      if (BOARD_MATRIX_MIRROR_X) x = 7 - x;
+      if (BOARD_MATRIX_SERPENTINE && (y % 2) == 0) x = 7 - x;
+      const uint16_t phys = y * 8 + x;
       if (idle) {
         ledBuf[phys] = {idleMatrix[i].r, idleMatrix[i].g, idleMatrix[i].b};
       } else {
