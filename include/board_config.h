@@ -121,18 +121,18 @@ static const uint8_t BOARD_WS2812_PIN = 1;
 //
 //   MATRIX_MIRROR_X / MATRIX_MIRROR_Y: o PAINEL inteiro montado/ligado
 //   virado — DIN do lado oposto do esperado no eixo horizontal (MIRROR_X)
-//   e/ou no eixo vertical (MIRROR_Y). Nesta bancada os dois estao
-//   ligados: o indice fisico 0 fica no canto INFERIOR DIREITO (nao
-//   superior esquerdo), ou seja, o painel equivale a girado 180°.
+//   e/ou no eixo vertical (MIRROR_Y).
 //
-// Diagnostico usado pra descobrir isto sem chute: comando serial
-// MATRIXWALK (src/main.cpp) acende um pixel fisico cru por vez (indice
-// 0-63, sem nenhum remapeamento) — muito mais confiavel que tentar
-// deduzir pela forma de caracteres (essa abordagem foi tentada antes e
-// nao convergia: acertava um numero e errava outro). Resultado medido
-// nesta bancada: phys=0 = inferior direito; phys 0->7 anda pra esquerda
-// (fiada de baixo); phys=8 = superior direito da fiada de cima (nao em
-// cima do phys=7) — confirma fiacao reta, painel girado 180°.
+// Nesta bancada, os tres flags ficaram FALSE: fiacao reta, sem
+// espelhamento nenhum (phys = i, indice cru bate direto com o indice do
+// SimHub). Confirmado por comparacao direta de caracteres reais (SimHub
+// x foto da matriz fisica) apos a medicao inicial do comando MATRIXWALK
+// (src/main.cpp — acende um pixel fisico cru por vez, sem remapeamento)
+// ter apontado erroneamente MIRROR_X=MIRROR_Y=true; a leitura crua da
+// placa nessa medicao foi feita com a caixa em outra orientacao (~180°)
+// da que ela fica montada normalmente, o que enviesou o resultado — os
+// caracteres reais é que confirmam a fiação de verdade, sempre prefira
+// esse teste ao MATRIXWALK sozinho se os dois divergirem.
 static const bool BOARD_MATRIX_SERPENTINE = false;
 static const bool BOARD_MATRIX_MIRROR_X   = false;
 static const bool BOARD_MATRIX_MIRROR_Y   = false;
