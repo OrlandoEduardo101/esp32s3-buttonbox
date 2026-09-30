@@ -135,7 +135,7 @@ static const uint8_t BOARD_WS2812_PIN = 1;
 // cima do phys=7) — confirma fiacao reta, painel girado 180°.
 static const bool BOARD_MATRIX_SERPENTINE = false;
 static const bool BOARD_MATRIX_MIRROR_X   = true;
-static const bool BOARD_MATRIX_MIRROR_Y   = true;
+static const bool BOARD_MATRIX_MIRROR_Y   = false;
 
 // 0x0800 = canal C11 (Start Engine) tratado como active-high.
 //
