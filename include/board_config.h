@@ -109,29 +109,33 @@ static const uint8_t BOARD_WS2812_PIN = 1;
 
 // Remapeamento da matriz 8x8: o SimHub manda os 64 pixels em ordem linear
 // (linha a linha, esquerda->direita, topo->baixo). O remapeamento em
-// src/main.cpp converte isso pro indice fisico real da cadeia, em duas
+// src/main.cpp converte isso pro indice fisico real da cadeia, em tres
 // etapas independentes — cada uma resolve um problema de fiação diferente:
 //
 //   MATRIX_SERPENTINE: quase todo painel 8x8 WS2812 barato e' fiado em
 //   zigue-zague por dentro (uma trilha so, sem pular linha) — a linha 0 vai
 //   esquerda->direita, a linha 1 direita->esquerda, e assim por diante.
-//   true corrige isso; false assume fiacao reta (cada linha sempre
-//   esquerda->direita), rara em paineis prontos.
+//   true corrige isso; false assume fiacao reta (cada linha sempre no
+//   mesmo sentido). O painel desta bancada e' fiacao RETA — confirmado com
+//   o comando MATRIXWALK (ver abaixo), nao zigue-zague.
 //
-//   MATRIX_MIRROR_X: espelhamento adicional e' o PAINEL inteiro montado/
-//   ligado com o DIN do lado oposto do esperado (ex.: entra pela direita em
-//   vez da esquerda) — isso espelha a imagem toda no eixo horizontal, POR
-//   CIMA do zigue-zague acima (as duas causas sao independentes: uma e' a
-//   fiacao interna do painel, a outra e' como ele foi montado/orientado).
-//   Sintoma classico: um numero ou letra aparece com a lateralidade
-//   trocada (ex.: um "2" enviado pelo SimHub aparece parecido com um "S").
+//   MATRIX_MIRROR_X / MATRIX_MIRROR_Y: o PAINEL inteiro montado/ligado
+//   virado — DIN do lado oposto do esperado no eixo horizontal (MIRROR_X)
+//   e/ou no eixo vertical (MIRROR_Y). Nesta bancada os dois estao
+//   ligados: o indice fisico 0 fica no canto INFERIOR DIREITO (nao
+//   superior esquerdo), ou seja, o painel equivale a girado 180°.
 //
-// Se a imagem ainda sair errada depois de ajustar estas duas constantes,
-// o proximo suspeito e' inversao VERTICAL (linha 0 fisica = topo do
-// SimHub ou o contrario) — ainda nao existe flag pronta pra isso; avise
-// se precisar.
-static const bool BOARD_MATRIX_SERPENTINE = true;
+// Diagnostico usado pra descobrir isto sem chute: comando serial
+// MATRIXWALK (src/main.cpp) acende um pixel fisico cru por vez (indice
+// 0-63, sem nenhum remapeamento) — muito mais confiavel que tentar
+// deduzir pela forma de caracteres (essa abordagem foi tentada antes e
+// nao convergia: acertava um numero e errava outro). Resultado medido
+// nesta bancada: phys=0 = inferior direito; phys 0->7 anda pra esquerda
+// (fiada de baixo); phys=8 = superior direito da fiada de cima (nao em
+// cima do phys=7) — confirma fiacao reta, painel girado 180°.
+static const bool BOARD_MATRIX_SERPENTINE = false;
 static const bool BOARD_MATRIX_MIRROR_X   = true;
+static const bool BOARD_MATRIX_MIRROR_Y   = true;
 
 // 0x0800 = canal C11 (Start Engine) tratado como active-high.
 //

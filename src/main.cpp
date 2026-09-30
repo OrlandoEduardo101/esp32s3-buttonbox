@@ -751,12 +751,13 @@ void loop() {
       }
     } else {
       // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
-      // Duas correcoes de fiacao independentes, configuraveis em
+      // Tres correcoes de fiacao independentes, configuraveis em
       // board_config.h — ver o comentario la pra o que cada uma resolve.
       for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
-        const uint16_t y = i / 8;
+        uint16_t y = i / 8;
         uint16_t x = i % 8;
         if (BOARD_MATRIX_MIRROR_X) x = 7 - x;
+        if (BOARD_MATRIX_MIRROR_Y) y = 7 - y;
         if (BOARD_MATRIX_SERPENTINE && (y % 2) == 0) x = 7 - x;
         const uint16_t phys = y * 8 + x;
         if (idle) {
