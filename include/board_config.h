@@ -107,31 +107,26 @@ static const uint8_t  BOARD_MUX_CHANNEL_COUNT  = 15; // C0-C14 (docs/INPUTS_PINO
 // ======================================================================
 static const uint8_t BOARD_WS2812_PIN = 1;
 
-// 0x0000 = nenhum canal active-high. Todos os canais fecham para GND.
+// 0x0800 = canal C11 (Start Engine) tratado como active-high.
 //
-// Nota histórica: este campo já foi 0x0800 (C11 = Start Engine) quando o
-// botão iluminado montado tinha comum-ÂNODO (COM → 3,3V). Nessa fiação,
-// fechar a chave arrasta C11 para 3,3V (active-high) e o LED acende com
-// o ânodo no 3,3V e o cátodo/COM controlado pelo firmware.
+// Botão montado nesta bancada é comum-ÂNODO (COM → 3,3V). Fechar a chave
+// arrasta C11 para 3,3V, e o pull-down externo de ~4,7 kΩ entre C11 e GND
+// (já soldado — confirmado com o usuário) resolve o problema histórico de
+// pino flutuante: sem esse resistor, o pull-up interno da ESP32 no SIG
+// mantinha a linha em HIGH mesmo com o canal desconectado, e o botão 18
+// ficava SEMPRE acionado. Com o pull-down presente, active-high é seguro.
 //
-// PROBLEMA: sem pull-down externo de ~4,7 kΩ de C11 para GND, o pull-up
-// interno da ESP32 no SIG mantém a linha em HIGH mesmo com o canal
-// desconectado — indistinguível de "botão pressionado". Resultado:
-// botão 18 fica SEMPRE acionado, mesmo sem nada plugado em C11.
-//
-// Solução: tratar C11 como active-low padrão (COM → GND). O LED do botão
-// iluminado passa a ser controlado pelo BOARD_START_ENGINE_LED_PIN (GPIO2)
-// com o ânodo no GPIO e o cátodo no GND — ver seção 6 de INPUTS_PINOUT.md.
-// Se no futuro o botão for trocado por um de comum-ânodo E um pull-down
-// externo for adicionado, recoloque 0x0800 aqui.
-static const uint16_t BOARD_MUX_ACTIVE_HIGH_MASK = 0x0000;
+// Se um dia o botão for trocado por um de comum-CÁTODO (COM → GND), volte
+// isto para 0x0000 e remova o pull-down (ele deixaria de fazer sentido) —
+// ver a variante A em docs/INPUTS_PINOUT.md seção 11.
+static const uint16_t BOARD_MUX_ACTIVE_HIGH_MASK = 0x0800;
 
 // true  -> o LED acende com o GPIO em LOW (a ESP32 DRENA a corrente; use
 //          quando o comum/ânodo do botão estiver amarrado em 3,3 V).
 // false -> acende com o GPIO em HIGH (a ESP32 FORNECE; comum/cátodo no GND).
 // Anda junto com BOARD_MUX_ACTIVE_HIGH_MASK: se você mudou um, o outro
 // quase certamente também muda.
-static const bool BOARD_START_ENGINE_LED_ACTIVE_LOW = false;
+static const bool BOARD_START_ENGINE_LED_ACTIVE_LOW = true;
 
 // LED do botão Start Engine (saída). Acompanha a ignição:
 // aceso com INPUT_IGNITION_ON fechado, apagado com a chave em OFF — ver
