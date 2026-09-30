@@ -522,6 +522,19 @@ void setup() {
   nvsLoadBrightness();
 
   WiFi.mode(WIFI_STA);
+
+  // TX power reduzida (padrao da lib e' WIFI_POWER_19_5dBm, o maximo). O
+  // radio associando na rede e' o maior pico de corrente do boot inteiro,
+  // bem em cima do que MCP23017+74HC4067+WS2812 ja tinham acabado de puxar
+  // — em porta/cabo USB de PC com folga curta de corrente isso e' o gatilho
+  // classico de brownout (reset em loop, nunca chega a terminar a
+  // enumeracao USB). 11 dBm ainda cobre a distancia normal de mesa ate o
+  // roteador; se o RSSI ficar ruim demais num caso real, suba um degrau
+  // (13/15 dBm) em vez de voltar pro maximo direto. Nao precisa reaplicar
+  // em onWifiConnected() — ao contrario do setSleep(), TX power nao volta
+  // sozinho apos reconexao.
+  WiFi.setTxPower(WIFI_POWER_11dBm);
+
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.printf("[WiFi] conectando em \"%s\"...\n", WIFI_SSID);
