@@ -89,7 +89,7 @@ static void nvsSaveBrightness() {
 //   INPUT_IGNITION_ON                -> bit 15 / Botao 16
 //   INPUT_IGNITION_IGN               -> bit 16 / Botao 17
 //   INPUT_START_ENGINE               -> bit 17 / Botao 18
-//   INPUT_HANDBRAKE                  -> bit 18 / Botao 19
+//   INPUT_HANDBRAKE                  -> bit 18 / Botao 19  [pulso, nao nivel — toggle do ETS2/ATS]
 //   INPUT_KILL_SWITCH_01             -> bit 19 / Botao 20
 //   INPUT_KILL_SWITCH_02             -> bit 20 / Botao 21
 //   INPUT_KILL_SWITCH_03             -> bit 21 / Botao 22
@@ -126,6 +126,57 @@ static EncoderPulseState encoderPulse[8];
 
 static const uint32_t ENCODER_PULSE_HIGH_MS    = 30;
 static const uint32_t ENCODER_PULSE_LOW_GAP_MS = 20;
+
+// Freio de estacionamento: pulso de toggle, NAO nivel espelhado. Spec em
+// docs/INPUTS_PINOUT.md secao 7 (decidida com o usuario faz tempo, mas
+// nunca chegou a ser implementada ate agora -- a integracao HID original
+// tratou INPUT_HANDBRAKE igual a qualquer outro botao de nivel, o que
+// esta ERRADO para o Euro/American Truck Simulator: o bind padrao de
+// freio de estacionamento nesses jogos e' TOGGLE (alterna a cada aperto),
+// e o manete fisico e' um switch de 2 posicoes ESTAVEIS, nao momentaneo.
+// Se o HID so espelhasse o nivel do switch, o jogo veria "segurar o
+// botao" enquanto o freio ficasse puxado -- nao "apertar", entao nao
+// alternaria de volta quando o manete voltasse pra cima.
+//
+// Solucao (a mesma dos encoders): CADA troca de posicao do manete --
+// PRESSED (desceu) OU RELEASED (subiu), as duas direcoes -- dispara UM
+// pulso momentaneo no bit, nunca um nivel sustentado. Isso mantem o
+// manete fisico sempre coerente com o estado do freio no jogo, contanto
+// que os dois comecem sincronizados. Reaproveita o mesmo tipo/constantes
+// de pulso dos encoders por ser exatamente o mesmo problema.
+static EncoderPulseState handbrakePulse;
+
+static void updateHandbrakePulse(uint32_t &buttons, uint32_t now) {
+  const uint32_t bit = (1UL << (uint8_t)INPUT_HANDBRAKE);
+
+  switch (handbrakePulse.phase) {
+    case EncoderPulsePhase::Idle: {
+      const InputEventType ev = inputs_get_event(INPUT_HANDBRAKE);
+      if (ev == INPUT_EVENT_PRESSED || ev == INPUT_EVENT_RELEASED) {
+        handbrakePulse.phase = EncoderPulsePhase::High;
+        handbrakePulse.phaseUntilMs = now + ENCODER_PULSE_HIGH_MS;
+        buttons |= bit;
+      } else {
+        buttons &= ~bit;
+      }
+      break;
+    }
+    case EncoderPulsePhase::High:
+      buttons |= bit;
+      if ((int32_t)(now - handbrakePulse.phaseUntilMs) >= 0) {
+        handbrakePulse.phase = EncoderPulsePhase::LowGap;
+        handbrakePulse.phaseUntilMs = now + ENCODER_PULSE_LOW_GAP_MS;
+        buttons &= ~bit;
+      }
+      break;
+    case EncoderPulsePhase::LowGap:
+      buttons &= ~bit;
+      if ((int32_t)(now - handbrakePulse.phaseUntilMs) >= 0) {
+        handbrakePulse.phase = EncoderPulsePhase::Idle;
+      }
+      break;
+  }
+}
 
 // LED do botao Start Engine (GPIO2) — espelha a IGNICAO, nao o botao.
 //
@@ -631,14 +682,22 @@ void loop() {
   // que deixou de ser usado). E o primeiro slot disponivel se voce adicionar
   // um controle — ver o orcamento de bits em docs/INPUTS_PINOUT.md secao 9.
 
-  // Entradas de nivel (botões, ignição, start, freio, chaves caça): mapa
+  // Entradas de nivel (botões, ignição, start, chaves caça): mapa
   // explicito no topo do arquivo — bit = (uint8_t)id. inputs_get_state()
   // já vem debounced (MCP23017/74HC4067 debouncam na própria camada).
+  // INPUT_HANDBRAKE fica de fora: é pulso de toggle, não nível — ver
+  // updateHandbrakePulse() no topo do arquivo.
   for (uint8_t id = 0; id < INPUT_LEVEL_ID_COUNT; id++) {
+    if (id == INPUT_HANDBRAKE) continue;
     const uint32_t bit = (1UL << id);
     if (inputs_get_state((InputId)id)) buttons |= bit;
     else                                buttons &= ~bit;
   }
+
+  // Freio de estacionamento: pulso de toggle a cada troca de posição do
+  // manete (ver updateHandbrakePulse no topo do arquivo) — exigência do
+  // bind padrão de freio do Euro/American Truck Simulator.
+  updateHandbrakePulse(buttons, now);
 
   // Encoders: cada detent vira um pulso momentâneo (ver
   // updateEncoderPulses no topo do arquivo), nunca um nível.

@@ -187,7 +187,7 @@ modificar código").
 | Cada push button (11) individualmente | Bit correspondente no `joy.cpl` acende/apaga exatamente ao apertar/soltar | `mux-test` (canais C0-C10, direto do 74HC4067, sem passar por `inputs`/HID) |
 | SW dos 4 encoders | Idem, 4 botões (12-15) | `mcp-test` (GPB0-GPB3, MCP23017 direto) |
 | 4 encoders — CW/CCW | Cada detent físico gera exatamente 1 evento no sentido certo | `encoder-test` (quadratura isolada, lendo GPA0-GPA7 do MCP23017). Detent faltando aponta para o período de amostragem / I2C, não para o decoder — ver `docs/INPUTS_PINOUT.md` seção "O preço dessa troca" |
-| Freio de estacionamento | Estado acompanha a posição da alavanca | `mux-test` (canal C14) |
+| Freio de estacionamento | Estado do canal acompanha a posição da alavanca (nível, neste teste isolado do mux) — no HID final (`joy.cpl`) o botão 19 é **pulso**, não nível: cada troca de posição dispara um clique só, ver `docs/INPUTS_PINOUT.md` seção 7 | `mux-test` (canal C14) |
 | Ignição (3 posições) | ON e IGN corretos, IGN só durante o crank (ver `docs/INPUTS_PINOUT.md` seção 3) | `mux-test` (canais C12/C13) |
 | Start Engine | Botão + LED (se já ligado) | `mux-test` (canal C11) para o botão; o LED é controlado pelo firmware (`updateStartEngineLed()` em `src/main.cpp`), acompanha `INPUT_IGNITION_ON` — testável direto pela serial com `LED 1`/`LED 0`/`LED AUTO`, ver `docs/ARCHITECTURE.md` seção 10 |
 | 4 chaves caça | Estado acompanha a posição da chave | `mcp-test` (GPB4-GPB7) |

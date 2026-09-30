@@ -357,8 +357,13 @@ de estado do switch (não espelha o nível):
 Isso mantém a posição física do manete sempre coerente com o estado do freio
 no jogo, contanto que os dois comecem sincronizados (ex.: sessão sempre
 inicia com o manete pra baixo / freio acionado, que é o padrão real de
-caminhão parado). Ainda não implementado — só a especificação de
-comportamento, conforme o escopo atual (arquitetura/pinout apenas).
+caminhão parado).
+
+**Implementado.** `updateHandbrakePulse()` em `src/main.cpp` — reaproveita o
+mesmo mecanismo de pulso dos encoders (30ms high + 20ms low gap). Antes
+disso, a integração HID da seção 10 tratava `INPUT_HANDBRAKE` igual a
+qualquer outro botão de nível por descuido, o que é exatamente o
+comportamento errado descrito acima; corrigido.
 
 ---
 
@@ -454,7 +459,7 @@ comentário no topo de `src/main.cpp`):
 | INPUT_IGNITION_ON | 15 | 16 | nível |
 | INPUT_IGNITION_IGN | 16 | 17 | nível |
 | INPUT_START_ENGINE | 17 | 18 | nível |
-| INPUT_HANDBRAKE | 18 | 19 | nível |
+| INPUT_HANDBRAKE | 18 | 19 | pulso |
 | INPUT_KILL_SWITCH_01..04 | 19-22 | 20-23 | nível |
 | INPUT_ENCODER_01_CW / _CCW | 23 / 24 | 24 / 25 | pulso |
 | INPUT_ENCODER_02_CW / _CCW | 25 / 26 | 26 / 27 | pulso |
@@ -462,8 +467,15 @@ comentário no topo de `src/main.cpp`):
 | INPUT_ENCODER_04_CW / _CCW | 29 / 30 | 30 / 31 | pulso |
 | **livre** (era o heartbeat de bring-up) | 31 | 32 | — |
 
-Entradas de **nível** (botões/switches/ignição): `inputs_get_state()` já
-debounced é espelhado direto no bit — sem lógica extra no `main.cpp`.
+Entradas de **nível** (botões/chaves caça/ignição): `inputs_get_state()` já
+debounced é espelhado direto no bit — sem lógica extra no `main.cpp`. A
+ignição (`INPUT_IGNITION_ON`/`_IGN`) fica de propósito como nível: a chave
+física é ela mesma um switch com posição mantida, e é assim que jogos/mods
+com estado de ignição esperam receber (o key está ligado ou não, não é um
+"toggle" por aperto). As 4 chaves caça (`INPUT_KILL_SWITCH_01..04`) também
+são nível puro — nenhum comportamento de jogo especial documentado pra
+elas; se um dia forem bindadas a uma ação do tipo toggle no jogo, o mesmo
+problema do freio de estacionamento abaixo se aplica e o fix é o mesmo.
 
 Entradas de **encoder** (CW/CCW): como `lib/inputs` só expõe EVENTO pra
 rotação (nunca um "nível segurado"), o `main.cpp` traduz cada evento
@@ -473,6 +485,14 @@ LOW por pelo menos 20ms antes do próximo pulso poder começar
 visível pro host mesmo com vários detents em sequência rápida — o
 jogo/SimHub sempre vê "aperta e solta" um número exato de vezes, nunca um
 botão "preso".
+
+Entrada de **freio de estacionamento** (`INPUT_HANDBRAKE`): também vira
+**pulso**, não nível — mesmo motivo dos encoders na mecânica (um evento
+vira uma borda momentânea), mas por um motivo de JOGO diferente: o bind
+padrão de freio no Euro/American Truck Simulator é toggle, e um switch de
+2 posições estáveis não bate com "segurar nível" — ver seção 7 para o
+raciocínio completo. `updateHandbrakePulse()` dispara um pulso a cada
+troca de posição do manete, nas duas direções.
 
 **BOOT deixou de alimentar o HID.** O antigo `BOOT -> bit 0 (Botão 1)` era
 um valor simulado de bring-up (pré-hardware-real); foi removido e o bit 0

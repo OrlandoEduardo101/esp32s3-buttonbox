@@ -187,7 +187,7 @@ responsible layer before modifying code").
 | Each push button (11) individually | The corresponding bit in `joy.cpl` lights up/turns off exactly on press/release | `mux-test` (channels C0-C10, straight from the 74HC4067, without going through `inputs`/HID) |
 | SW switches of the 4 encoders | Same, 4 buttons (12-15) | `mcp-test` (GPB0-GPB3, MCP23017 directly) |
 | 4 encoders — CW/CCW | Each physical detent produces exactly 1 event in the right direction | `encoder-test` (quadrature in isolation, reading GPA0-GPA7 from the MCP23017). A missing detent points at the sampling period / I2C, not at the decoder — see `docs/INPUTS_PINOUT.en.md`, "The price of this trade" |
-| Parking brake | State follows the lever's position | `mux-test` (channel C14) |
+| Parking brake | Channel state follows the lever's position (level, in this isolated mux test) — on the final HID (`joy.cpl`) button 19 is a **pulse**, not a level: each position change fires a single click, see `docs/INPUTS_PINOUT.en.md` section 7 | `mux-test` (channel C14) |
 | Ignition (3 positions) | ON and IGN correct, IGN only during cranking (see `docs/INPUTS_PINOUT.en.md` section 3) | `mux-test` (channels C12/C13) |
 | Start Engine | Button + LED (if already wired) | `mux-test` (channel C11) for the button; the LED is firmware-controlled (`updateStartEngineLed()` in `src/main.cpp`), follows `INPUT_IGNITION_ON` — testable directly over serial with `LED 1`/`LED 0`/`LED AUTO`, see `docs/ARCHITECTURE.en.md` section 10 |
 | 4 toggle switches | State follows the switch's position | `mcp-test` (GPB4-GPB7) |
