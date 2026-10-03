@@ -360,6 +360,26 @@ static bool otaReady    = false;
 static bool otaRunning  = false;
 static bool portalAtivo = false;
 
+// Abre o portal de configuracao de WiFi (AP "ButtonBox-Setup"). Chamada
+// tanto pelo gesto do BOOT fisico quanto pelo combo de botoes da caixa
+// fechada (ver os dois pontos de chamada em loop()) — a logica de abrir e'
+// identica nos dois, so muda o gesto que dispara.
+static void startWifiPortal() {
+  Serial.println("[WiFi] abrindo portal de configuracao");
+  wm.setConfigPortalBlocking(false);
+  // BUG CORRIGIDO: startConfigPortal() em modo NAO-BLOQUEANTE sempre
+  // retorna false na hora (so entra no loop bloqueante se
+  // setConfigPortalBlocking(true), que nao e' o nosso caso) -- o valor de
+  // retorno aqui NUNCA significa "portal ativo", sempre "nao bloqueou".
+  // Atribuir esse retorno direto a portalAtivo fazia o loop() nunca
+  // chamar wm.process() (guardado por `if (portalAtivo)`), entao o portal
+  // subia (AP no ar, SSID aparece) mas a pagina de configuracao nunca
+  // respondia -- processConfigPortal() so roda dentro de wm.process().
+  // Fix: portalAtivo = true direto, ignorando o retorno da chamada.
+  wm.startConfigPortal(AP_NAME);
+  portalAtivo = true;
+}
+
 static void startOta() {
   if (otaReady) return;
 
@@ -694,7 +714,14 @@ void setup() {
 }
 
 void loop() {
-  if (portalAtivo) wm.process();
+  // wm.process() retorna true assim que conecta na rede nova escolhida no
+  // portal -- so' ai' devolve o controle pro wifiKeepAlive() normal
+  // (guardado por `if (portalAtivo) return;`). Sem isso, portalAtivo ficava
+  // true pra sempre depois do primeiro sucesso.
+  if (portalAtivo && wm.process()) {
+    portalAtivo = false;
+    Serial.println("[WiFi] portal: rede salva e conectada");
+  }
   onWifiConnected(); // reaplica setSleep(false) e sobe o OTA na (re)conexao
   if (otaReady) ArduinoOTA.handle();
 
@@ -737,19 +764,36 @@ void loop() {
     const uint16_t stripCount = simhub_get_strip_count();
     uint16_t total = SIMHUB_MATRIX_LED_COUNT + stripCount;
     if (total > WS2812_MAX_LEDS) total = WS2812_MAX_LEDS;
-    if (idle) {
-      led_idle_render(millis(), idleMatrix, idleStrip, stripCount);
-    }
+
+    // Matriz/fita apagam com a ignicao em OFF, igual o LED do Start Engine
+    // (updateStartEngineLed, mesma fonte: inputs_get_state(INPUT_IGNITION_ON)).
+    // Decisao do usuario: o "painel" do carro inteiro desliga com a chave,
+    // nao so o botao — nem SimHub nem a animacao de idle aparecem nesse
+    // estado, exatamente como um painel de carro de verdade apaga com a
+    // chave fora. MATRIXWALK continua funcionando com a ignicao desligada
+    // de proposito — e' diagnostico manual, nao efeito normal de uso.
+    const bool ignitionOn = inputs_get_state(INPUT_IGNITION_ON);
 
     if (g_matrixWalkPhys >= 0) {
-      // MATRIXWALK ativo: ignora SimHub/idle, acende só o indice FISICO
-      // cru corrente, sem nenhum remapeamento — ver comentario de
+      // MATRIXWALK ativo: ignora SimHub/idle/ignicao, acende só o indice
+      // FISICO cru corrente, sem nenhum remapeamento — ver comentario de
       // g_matrixWalkPhys.
       for (uint16_t i = 0; i < SIMHUB_MATRIX_LED_COUNT; i++) {
         ledBuf[i] = (i == (uint16_t)g_matrixWalkPhys) ? Ws2812Color{255, 255, 255}
                                                        : Ws2812Color{0, 0, 0};
       }
+      for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
+        ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {0, 0, 0};
+      }
+    } else if (!ignitionOn) {
+      // Ignicao OFF: tudo apagado, sem gastar tempo renderizando idle/
+      // SimHub pra nada (led_idle_render nem e' chamado aqui).
+      for (uint16_t i = 0; i < total; i++) ledBuf[i] = {0, 0, 0};
     } else {
+      if (idle) {
+        led_idle_render(millis(), idleMatrix, idleStrip, stripCount);
+      }
+
       // Matriz: o SimHub manda os 64 pixels em ordem linear (linha a linha).
       // Tres correcoes de fiacao independentes, configuraveis em
       // board_config.h — ver o comentario la pra o que cada uma resolve.
@@ -767,15 +811,15 @@ void loop() {
           ledBuf[phys] = {c.r, c.g, c.b};
         }
       }
-    }
 
-    // Fita, logo depois da matriz na mesma cadeia.
-    for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
-      if (idle) {
-        ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {idleStrip[j].r, idleStrip[j].g, idleStrip[j].b};
-      } else {
-        const SimhubColor c = simhub_get_strip_led(j);
-        ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {c.r, c.g, c.b};
+      // Fita, logo depois da matriz na mesma cadeia.
+      for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
+        if (idle) {
+          ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {idleStrip[j].r, idleStrip[j].g, idleStrip[j].b};
+        } else {
+          const SimhubColor c = simhub_get_strip_led(j);
+          ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {c.r, c.g, c.b};
+        }
       }
     }
 
@@ -834,13 +878,26 @@ void loop() {
   static uint32_t bootHeldSince = 0;
   if (bootDown) {
     if (bootHeldSince == 0) bootHeldSince = now;
-    if (!portalAtivo && now - bootHeldSince >= 5000) {
-      Serial.println("[WiFi] BOOT 5s: abrindo portal de configuracao");
-      wm.setConfigPortalBlocking(false);
-      portalAtivo = wm.startConfigPortal(AP_NAME);
-    }
+    if (!portalAtivo && now - bootHeldSince >= 5000) startWifiPortal();
   } else {
     bootHeldSince = 0;
+  }
+
+  // Gesto alternativo com a caixa FECHADA (sem acesso ao BOOT da placa):
+  // Push button 1 + Push button 11 (os dois extremos do banco de botoes)
+  // segurados juntos por 5s tambem abre o portal. Combinacao escolhida de
+  // proposito por ser dificil de acionar sem querer (os dois extremos do
+  // 74HC4067, nao dois botoes vizinhos) e por serem botoes de nivel de
+  // verdade (aguentam ficar segurados, diferente do freio/chaves caca que
+  // viraram pulso).
+  const bool comboDown = inputs_get_state(INPUT_BUTTON_01) &&
+                          inputs_get_state(INPUT_BUTTON_11);
+  static uint32_t comboHeldSince = 0;
+  if (comboDown) {
+    if (comboHeldSince == 0) comboHeldSince = now;
+    if (!portalAtivo && now - comboHeldSince >= 5000) startWifiPortal();
+  } else {
+    comboHeldSince = 0;
   }
 
   if (buttons != lastSent) {
