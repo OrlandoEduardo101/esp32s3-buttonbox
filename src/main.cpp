@@ -694,6 +694,25 @@ void setup() {
   // em RAM — o driver precisa estar pronto antes de qualquer ws2812_show().
   nvsLoadBrightness();
 
+  // Flash rapido de "a placa ligou": so dispara se a ignicao JA estiver em
+  // ON neste boot (plugou o USB com a chave ligada) — pedido do usuario,
+  // pra ter uma confirmacao visual rapida sem precisar abrir o monitor
+  // serial. Com a chave desligada nao faz sentido piscar: matriz/fita
+  // ficam apagadas de proposito nesse estado (ver bloco de ignicao em
+  // loop()), entao a ausencia de luz ja e' o estado esperado, nao um
+  // sinal de erro. Branco, ~150ms, um pulso so — bloqueante de proposito
+  // (so roda aqui no setup(), antes do WiFi subir, nao afeta o loop()).
+  if (inputs_get_state(INPUT_IGNITION_ON)) {
+    static Ws2812Color flashBuf[WS2812_MAX_LEDS];
+    uint16_t flashTotal = SIMHUB_MATRIX_LED_COUNT + simhub_get_strip_count();
+    if (flashTotal > WS2812_MAX_LEDS) flashTotal = WS2812_MAX_LEDS;
+    for (uint16_t i = 0; i < flashTotal; i++) flashBuf[i] = {255, 255, 255};
+    ws2812_show(flashBuf, flashTotal);
+    delay(150);
+    for (uint16_t i = 0; i < flashTotal; i++) flashBuf[i] = {0, 0, 0};
+    ws2812_show(flashBuf, flashTotal);
+  }
+
   WiFi.mode(WIFI_STA);
 
   // TX power reduzida (padrao da lib e' WIFI_POWER_19_5dBm, o maximo). O
@@ -794,6 +813,19 @@ void loop() {
       for (uint16_t j = 0; SIMHUB_MATRIX_LED_COUNT + j < total; j++) {
         ledBuf[SIMHUB_MATRIX_LED_COUNT + j] = {0, 0, 0};
       }
+    } else if (portalAtivo) {
+      // Portal de WiFi ativo (BOOT ou combo de botoes seguraram 5s):
+      // respira azul na matriz+fita inteira, pra confirmar visualmente
+      // "modo de configuracao" sem precisar abrir o monitor serial nem
+      // adivinhar se o AP ButtonBox-Setup realmente subiu. Roda MESMO com
+      // ignicao desligada (voce pode configurar o WiFi antes de ligar a
+      // chave) — por isso este bloco vem ANTES do `!ignitionOn` abaixo.
+      // Azul puro, periodo de ~2s, triangular — cor que nao aparece em
+      // nenhum efeito normal do SimHub nem na animacao de idle.
+      const uint32_t phase = millis() % 2000;
+      const uint16_t level = (phase < 1000) ? phase : (2000 - phase);
+      const uint8_t  b     = (uint8_t)(40 + (level * (255 - 40)) / 999);
+      for (uint16_t i = 0; i < total; i++) ledBuf[i] = {0, 0, b};
     } else if (!ignitionOn) {
       // Ignicao OFF: tudo apagado, sem gastar tempo renderizando idle/
       // SimHub pra nada (led_idle_render nem e' chamado aqui).
