@@ -219,34 +219,60 @@ terminated by `\n` (32-byte buffer, `\r` ignored).
 
 ## 11. How WiFi connects
 
-Always station mode (STA), fixed credentials coming from `include/secrets.h`
-(`WIFI_SSID`, `WIFI_PASS` — git-ignored file, values never exposed in this
-document):
+**No hardcoded credential (changed Oct/2026).** Always station mode (STA),
+but `WiFi.begin()` is called **with no arguments** — this reconnects to the
+last network saved in the ESP32's own NVS (persisted automatically on every
+successful `WiFi.begin(ssid, pass)`, including what the config portal does
+internally). On a never-configured board this simply doesn't connect (empty
+NVS) until someone opens the portal once — deliberate: no network is fixed
+in the firmware or the repo, so anyone reusing this project (or moving
+houses/networks, as actually happened in practice) configures their own
+network through the portal alone, with no code or `secrets.h` edit:
 
 ```cpp
 // setup()
 WiFi.mode(WIFI_STA);
 WiFi.setAutoReconnect(true);
-WiFi.begin(WIFI_SSID, WIFI_PASS);
+WiFi.begin(); // last network saved in NVS, no credential in the code
 ```
 
 If the connection drops or never comes up, `wifiKeepAlive()` (called every
 `loop()`, but throttled to 1 attempt every 10s) calls `WiFi.disconnect()` +
-`WiFi.begin()` again, **forever, without giving up and without opening the portal
-on its own**. This is deliberate (comment at the top of `main.cpp`): an earlier
-version opened the config portal automatically on every failure and the
-board got stuck in AP mode, offline, never reconnecting again.
+`WiFi.begin()` again (same no-argument call), **forever, without giving up
+and without opening the portal on its own**. This is deliberate (comment at
+the top of `main.cpp`): an earlier version opened the config portal
+automatically on every failure and the board got stuck in AP mode, offline,
+never reconnecting again.
 
-The config portal (`WiFiManager`, for switching networks without recompiling)
-only opens on explicit request: holding the BOOT button for 5 seconds **during
-normal operation** (not at boot — GPIO0 low at reset enters download mode
-and the app never even runs):
+The config portal (`WiFiManager`, for switching/registering the network
+without recompiling or editing `secrets.h`) only opens on explicit request,
+**two** ways:
+- holding the board's **BOOT** button for 5 seconds **during normal
+  operation** (not at boot — GPIO0 low at reset enters download mode and
+  the app never even runs);
+- with the **case closed** (no access to BOOT): holding **Push button 1 +
+  Push button 2** together for 5 seconds. Any button combo works as long as
+  it doesn't include Push button 11 (it's the radio PTT — pressed
+  frequently during normal use, can't be part of a "hold for 5s" gesture).
+
 ```cpp
-if (bootDown && !portalAtivo && now - bootHeldSince >= 5000) {
+// src/main.cpp — same function for both gestures
+static void startWifiPortal() {
   wm.setConfigPortalBlocking(false);
-  portalAtivo = wm.startConfigPortal(AP_NAME);  // AP_NAME = "ButtonBox-Setup"
+  wm.startConfigPortal(AP_NAME);  // AP_NAME = "ButtonBox-Setup"
+  portalAtivo = true;             // do NOT use the return value — see note below
 }
 ```
+
+**Bug fixed (Oct/2026):** `startConfigPortal()` in non-blocking mode always
+returns `false` immediately (it only enters the blocking loop when
+configured blocking, which isn't the case here). Assigning that return
+value directly to `portalAtivo` made `loop()` never call `wm.process()` —
+the portal's AP would come up (SSID visible) but the config page never
+responded, because the DNS/HTTP handler only runs inside `wm.process()`.
+Now `portalAtivo` is set to `true` unconditionally, and only goes back to
+`false` once `wm.process()` returns `true` (new network connected
+successfully).
 
 `WiFi.setSleep(false)` is only called inside `startOta()`, **after**
 `WiFi.begin()` has already been called in `setup()` — calling it before, with the
@@ -324,7 +350,7 @@ boot — there's no need to erase the entire flash.
 | `boards/esp32-s3-fh4r2.json` | Custom board definition (4 MB flash + PSRAM); swapping it for a generic board already caused a boot loop in the past. |
 | `scripts/enter_bootloader.py` | Mechanism that allows USB flashing without manually pressing the BOOT button; depends on the `BOOTLOADER` command in `main.cpp` using `usb_persist_restart()` (not the direct RTC register). |
 | `scripts/ota_port_by_mac.py` | Mechanism that lets `espota` find the board without a fixed IP or working mDNS. |
-| `include/secrets.h` | WiFi credentials and OTA hostname (`WIFI_SSID`, `WIFI_PASS`, `OTA_HOSTNAME`). Git-ignored — should never be committed or have its contents printed/logged. |
+| `include/secrets.h` | Just the OTA hostname (`OTA_HOSTNAME`) — WiFi no longer lives here, see section 11. Git-ignored — should never be committed or have its contents printed/logged. |
 | `~/.platformio/packages/framework-arduinoespressif32` (installed core) | Not part of this project, but the USB/HID/CDC behavior described here depends on the installed version (`espressif32@6.12.0` / `framework-arduinoespressif32@3.20017.241212`, see `docs/BASELINE.md`). A core update could change defaults (e.g. `USB_PID`, HID report layout). |
 
 **Not** a critical file, free for exploratory use: `src/diag.cpp` (isolated

@@ -139,11 +139,12 @@ isolamento, em [`docs/SYSTEM_INTEGRATION.md`](docs/SYSTEM_INTEGRATION.md).
 
 ## Como compilar e gravar
 
-1. **Credenciais de WiFi** (obrigatório, não versionado):
+1. **`secrets.h`** (obrigatório, não versionado — só o hostname OTA, sem
+   WiFi):
    ```
    cp include/secrets.h.example include/secrets.h
    ```
-   e edite `include/secrets.h` com sua rede WiFi real.
+   Não precisa editar nada pra WiFi funcionar — ver o passo 4 abaixo.
 
 2. **Pinout** (só se sua fiação for diferente do padrão): edite
    [`include/board_config.h`](include/board_config.h).
@@ -155,7 +156,15 @@ isolamento, em [`docs/SYSTEM_INTEGRATION.md`](docs/SYSTEM_INTEGRATION.md).
    Não precisa segurar nenhum botão — o firmware entra em modo download
    sozinho (ver `scripts/enter_bootloader.py`).
 
-4. **Gravar por OTA** (depois da primeira vez, com WiFi já configurado):
+4. **Configurar o WiFi** (nenhuma credencial fica no código/repositório):
+   segure o botão **BOOT** da placa por 5s — ou, com a caixa fechada,
+   **Push button 1 + Push button 2** juntos por 5s. Abre um Access Point
+   `ButtonBox-Setup`; conecta nele do celular/PC e escolhe a rede. Fica
+   salvo no NVS da própria placa, sobrevive a reboot. Pode repetir esse
+   gesto a qualquer momento pra trocar de rede (ex.: levou a button box pra
+   outra casa).
+
+5. **Gravar por OTA** (depois da primeira vez, com WiFi já configurado):
    ```
    pio run -e ota -t upload
    ```

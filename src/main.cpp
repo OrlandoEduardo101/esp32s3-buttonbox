@@ -447,7 +447,7 @@ static void wifiKeepAlive() {
 
   Serial.println("[WiFi] sem conexao, tentando novamente...");
   WiFi.disconnect();
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(); // ultima rede salva no NVS — ver nota em setup()
 }
 
 static void statusReport() {
@@ -709,8 +709,17 @@ void setup() {
   WiFi.setTxPower(WIFI_POWER_11dBm);
 
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("[WiFi] conectando em \"%s\"...\n", WIFI_SSID);
+  // SEM credencial hardcoded: WiFi.begin() sem argumentos reconecta na
+  // ULTIMA rede salva no NVS pelo proprio driver WiFi do ESP32 (persistente
+  // por padrao a cada WiFi.begin(ssid,pass) bem-sucedido — e' assim que o
+  // portal de configuracao grava a rede escolhida, ver startWifiPortal()).
+  // Numa placa de fábrica/nunca configurada isso simplesmente nao conecta
+  // (NVS vazio) ate alguem abrir o portal uma vez — comportamento
+  // intencional: nenhuma rede fica fixa no firmware/repositorio, qualquer
+  // pessoa que reaproveitar este projeto configura a rede dela pelo
+  // portal, sem editar codigo nem secrets.h.
+  WiFi.begin();
+  Serial.println("[WiFi] conectando na ultima rede salva...");
 }
 
 void loop() {
@@ -884,14 +893,14 @@ void loop() {
   }
 
   // Gesto alternativo com a caixa FECHADA (sem acesso ao BOOT da placa):
-  // Push button 1 + Push button 11 (os dois extremos do banco de botoes)
-  // segurados juntos por 5s tambem abre o portal. Combinacao escolhida de
-  // proposito por ser dificil de acionar sem querer (os dois extremos do
-  // 74HC4067, nao dois botoes vizinhos) e por serem botoes de nivel de
-  // verdade (aguentam ficar segurados, diferente do freio/chaves caca que
-  // viraram pulso).
+  // Push button 1 + Push button 2 segurados juntos por 5s tambem abre o
+  // portal. NAO use o Push button 11 pra isso nem combos com ele — e' o
+  // PTT do radio (confirmado com o usuario), aperto frequente durante uso
+  // normal. 1+2 sao botoes de nivel de verdade (aguentam ficar segurados,
+  // diferente do freio/chaves caca que viraram pulso) e nenhum tem funcao
+  // dedicada conhecida que exija segurar varios segundos.
   const bool comboDown = inputs_get_state(INPUT_BUTTON_01) &&
-                          inputs_get_state(INPUT_BUTTON_11);
+                          inputs_get_state(INPUT_BUTTON_02);
   static uint32_t comboHeldSince = 0;
   if (comboDown) {
     if (comboHeldSince == 0) comboHeldSince = now;

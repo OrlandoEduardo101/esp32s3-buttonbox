@@ -139,11 +139,12 @@ isolation rule, in
 
 ## How to build and flash
 
-1. **WiFi credentials** (required, not committed):
+1. **`secrets.h`** (required, not committed — just the OTA hostname, no
+   WiFi):
    ```
    cp include/secrets.h.example include/secrets.h
    ```
-   then edit `include/secrets.h` with your real WiFi network.
+   Nothing to edit for WiFi to work — see step 4 below.
 
 2. **Pinout** (only if your wiring differs from the default): edit
    [`include/board_config.h`](include/board_config.h).
@@ -155,7 +156,15 @@ isolation rule, in
    No button-holding needed — the firmware enters download mode on its
    own (see `scripts/enter_bootloader.py`).
 
-4. **Flash over OTA** (after the first flash, once WiFi is configured):
+4. **Set up WiFi** (no credential lives in the code/repo): hold the
+   board's **BOOT** button for 5s — or, with the case closed, **Push
+   button 1 + Push button 2** together for 5s. Opens a `ButtonBox-Setup`
+   access point; connect to it from your phone/PC and pick the network.
+   Saved to the board's own NVS, survives reboot. Repeat this gesture
+   anytime to switch networks (e.g. moved the button box to another
+   house).
+
+5. **Flash over OTA** (after the first flash, once WiFi is configured):
    ```
    pio run -e ota -t upload
    ```
