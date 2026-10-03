@@ -694,21 +694,27 @@ void setup() {
   // em RAM — o driver precisa estar pronto antes de qualquer ws2812_show().
   nvsLoadBrightness();
 
-  // Flash rapido de "a placa ligou": so dispara se a ignicao JA estiver em
-  // ON neste boot (plugou o USB com a chave ligada) — pedido do usuario,
-  // pra ter uma confirmacao visual rapida sem precisar abrir o monitor
-  // serial. Com a chave desligada nao faz sentido piscar: matriz/fita
-  // ficam apagadas de proposito nesse estado (ver bloco de ignicao em
-  // loop()), entao a ausencia de luz ja e' o estado esperado, nao um
-  // sinal de erro. Branco, ~150ms, um pulso so — bloqueante de proposito
-  // (so roda aqui no setup(), antes do WiFi subir, nao afeta o loop()).
-  if (inputs_get_state(INPUT_IGNITION_ON)) {
+  // "Power-on self-test" visual: confirma que a placa ligou mesmo SEM a
+  // ignicao ligada — pedido do usuario, pra ter uma pista rapida de vida
+  // sem precisar abrir o monitor serial nem ligar a chave primeiro.
+  // Sequencia curta (vermelho/verde/azul/branco, ~120ms cada, ~0,5s no
+  // total) e depois SEMPRE apaga no final — com a ignicao desligada, a
+  // matriz/fita voltam ao estado apagado esperado (ver bloco de ignicao
+  // em loop()); com a ignicao ligada, o loop() assume dali e mostra
+  // SimHub/idle normalmente. Bloqueante de proposito (so roda aqui no
+  // setup(), antes do WiFi subir, nao afeta o loop()).
+  {
     static Ws2812Color flashBuf[WS2812_MAX_LEDS];
     uint16_t flashTotal = SIMHUB_MATRIX_LED_COUNT + simhub_get_strip_count();
     if (flashTotal > WS2812_MAX_LEDS) flashTotal = WS2812_MAX_LEDS;
-    for (uint16_t i = 0; i < flashTotal; i++) flashBuf[i] = {255, 255, 255};
-    ws2812_show(flashBuf, flashTotal);
-    delay(150);
+    static const Ws2812Color POST_SEQUENCE[] = {
+      {255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 255},
+    };
+    for (const Ws2812Color &color : POST_SEQUENCE) {
+      for (uint16_t i = 0; i < flashTotal; i++) flashBuf[i] = color;
+      ws2812_show(flashBuf, flashTotal);
+      delay(120);
+    }
     for (uint16_t i = 0; i < flashTotal; i++) flashBuf[i] = {0, 0, 0};
     ws2812_show(flashBuf, flashTotal);
   }
