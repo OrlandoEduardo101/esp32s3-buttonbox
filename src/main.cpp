@@ -242,6 +242,43 @@ static bool isTogglePulseId(InputId id) {
   return false;
 }
 
+// Combo fisico pra ajustar o brilho dos LEDs sem precisar do comando
+// serial BRIGHTNESS: segura o SW do encoder 1 (INPUT_BUTTON_12, o clique
+// do proprio encoder) e GIRA o encoder 1 — cada detent sobe/desce 5%
+// (25-75%, mesma faixa/persistencia em NVS do comando serial). Escolhido
+// o encoder 1 especificamente (nao um botao separado) pelo padrao classico
+// de "aperta e gira" de potenciometro/encoder automotivo — um unico
+// controle fisico faz as duas coisas, sem precisar de mais um botao
+// dedicado.
+//
+// Tem que rodar ANTES de updateEncoderPulses() no loop(): enquanto o SW
+// esta segurado, os eventos CW/CCW do encoder 1 sao CONSUMIDOS aqui (a
+// fila fica vazia) e por isso NUNCA chegam a virar pulso no HID — girar
+// pra ajustar brilho nao manda nenhum giro falso pro jogo. Nota: o
+// proprio botao SW (INPUT_BUTTON_12) continua alimentando o HID
+// normalmente enquanto segurado (nao e' excluido do loop de nivel
+// generico) — se o botao 12 estiver bindado a algo no jogo, segurar ele
+// pra ajustar brilho tambem aciona esse bind, igual segurar qualquer
+// botao normalmente acionaria.
+static void updateBrightnessControl() {
+  if (!inputs_get_state(INPUT_BUTTON_12)) return;
+
+  bool changed = false;
+  while (inputs_get_event(INPUT_ENCODER_01_CW) != INPUT_EVENT_NONE) {
+    ws2812_set_brightness(ws2812_get_brightness() + 5);
+    changed = true;
+  }
+  while (inputs_get_event(INPUT_ENCODER_01_CCW) != INPUT_EVENT_NONE) {
+    ws2812_set_brightness(ws2812_get_brightness() - 5);
+    changed = true;
+  }
+  if (changed) {
+    nvsSaveBrightness();
+    Serial.printf("[brightness] %u%% (segura SW encoder 1 + gira)\n",
+                  (unsigned)ws2812_get_brightness());
+  }
+}
+
 // LED do botao Start Engine (GPIO2) — espelha a IGNICAO, nao o botao.
 //
 // Comportamento decidido com o usuario: apagado com a chave em OFF, acende
@@ -904,6 +941,12 @@ void loop() {
   // que precisar entra na lista TOGGLE_PULSE_IDS, sem função nova): pulso
   // a cada troca de posição — ver updateTogglePulses() no topo do arquivo.
   updateTogglePulses(buttons, now);
+
+  // Ajuste de brilho pelo encoder 1 (segura o SW + gira) — tem que vir
+  // ANTES de updateEncoderPulses(), pra consumir os eventos do encoder 1
+  // antes que virem pulso no HID. So faz algo com o SW do encoder 1
+  // segurado; ver comentario de updateBrightnessControl() no topo.
+  updateBrightnessControl();
 
   // Encoders: cada detent vira um pulso momentâneo (ver
   // updateEncoderPulses no topo do arquivo), nunca um nível.
